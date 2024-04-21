@@ -20,6 +20,7 @@ uiDivStats is available to install with [amtm - the Asuswrt-Merlin Terminal Menu
 Using your preferred SSH client/terminal, open amtm and use the i install option to install uiDivStats:
 ```sh
 amtm
+```
 
 Using your preferred SSH client/terminal, copy and paste the following command, then press Enter:
 
@@ -46,12 +47,6 @@ If this does not work, you will need to use the full path:
 ```sh
 /jffs/scripts/uiDivStats
 ```
-
-## Screenshots
-
-![WebUI](https://puu.sh/HMN1D/a11fca5232.png)
-
-![CLI UI](https://puu.sh/HMN1y/1309c8dc86.png)
 
 ## Help
 
