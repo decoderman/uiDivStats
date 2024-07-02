@@ -1,8 +1,8 @@
 # uiDivStats - WebUI for Diversion statistics
 
-## v4.0.0
+## v4.0.1
 
-### Updated on April 14, 2024 by @decoderman
+### Updated on July 01, 2024 by @decoderman
 
 ## About
 
