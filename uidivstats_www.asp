@@ -20,6 +20,8 @@ p{font-weight:bolder}thead.collapsible-jquery{color:#fff;padding:0;width:100%;bo
 <script language="JavaScript" type="text/javascript" src="/ext/shared-jy/chartjs-plugin-zoom.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/shared-jy/chartjs-plugin-annotation.js"></script>
 <script language="JavaScript" type="text/javascript" src="/ext/shared-jy/d3.js"></script>
+<script language="JavaScript" type="text/javascript" src="/js/jquery.js"></script>
+<script language="JavaScript" type="text/javascript" src="/js/httpApi.js"></script>
 <script language="JavaScript" type="text/javascript" src="/state.js"></script>
 <script language="JavaScript" type="text/javascript" src="/general.js"></script>
 <script language="JavaScript" type="text/javascript" src="/popup.js"></script>
@@ -30,6 +32,11 @@ p{font-weight:bolder}thead.collapsible-jquery{color:#fff;padding:0;width:100%;bo
 <script language="JavaScript" type="text/javascript" src="/client_function.js"></script>
 <script language="JavaScript" type="text/javascript" src="/validator.js"></script>
 <script>
+
+/**----------------------------------------**/
+/** Modified by Martinski W. [2024-Jul-01] **/
+/**----------------------------------------**/
+
 var custom_settings;
 function LoadCustomSettings(){
 	custom_settings = <% get_custom_settings(); %>;
