@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Jul-01
+# Last Modified: 2024-Sep-08
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -28,7 +28,7 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.1"
+readonly SCRIPT_VERSION="v4.0.2"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -1735,7 +1735,8 @@ Check_Requirements(){
 			CHECKSFAILED="true"
 		fi
 
-		if ! /opt/bin/grep -q 'log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf; then
+		if ! /opt/bin/grep -q '^log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf
+		then
 			Print_Output false "Diversion logging not enabled!" "$ERR"
 			Print_Output false "Open Diversion and use option l to enable logging"
 			CHECKSFAILED="true"
@@ -1866,8 +1867,10 @@ Menu_Startup(){
 	Clear_Lock
 }
 
-Menu_GenerateStats(){
-	if /opt/bin/grep -q 'log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf; then
+Menu_GenerateStats()
+{
+	if /opt/bin/grep -q '^log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf
+	then
 		echo 'var uidivstatsstatus = "InProgress";' > /tmp/detect_uidivstats.js
 		renice 15 $$
 		if [ -n "$1" ] && [ "$1" = "fullrefresh" ]; then
@@ -2200,7 +2203,8 @@ case "$1" in
 		exit 0
 	;;
 	dnsmasq)
-		if grep -q 'log-facility' /etc/dnsmasq.conf; then
+		if grep -q '^log-facility=/.*' /etc/dnsmasq.conf
+		then
 			Print_Output true "dnsmasq has restarted, restarting taildns" "$PASS"
 			/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 			sleep 3

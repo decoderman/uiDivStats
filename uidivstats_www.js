@@ -1,4 +1,3 @@
-var $j = jQuery.noConflict(); //avoid conflicts on John's fork (state.js)
 var maxNoChartsBlocked = 6;
 var currentNoChartsBlocked = 0;
 var maxNoChartsTotal = 6;
@@ -20,11 +19,11 @@ Chart.Tooltip.positioners.cursor = function(chartElements,coordinates){
 
 function keyHandler(e){
 	if(e.keyCode == 82){
-		$j(document).off('keydown');
+		$(document).off('keydown');
 		ResetZoom();
 	}
 	else if(e.keyCode == 70){
-		$j(document).off('keydown');
+		$(document).off('keydown');
 		ToggleFill();
 	}
 }
@@ -79,11 +78,11 @@ function Validate_Number_Setting(forminput,upperlimit,lowerlimit){
 	var inputvalue = forminput.value*1;
 
 	if(inputvalue > upperlimit || inputvalue < lowerlimit){
-		$j(forminput).addClass('invalid');
+		$(forminput).addClass('invalid');
 		return false;
 	}
 	else{
-		$j(forminput).removeClass('invalid');
+		$(forminput).removeClass('invalid');
 		return true;
 	}
 }
@@ -115,9 +114,9 @@ function Validate_All(){
 	}
 }
 
-$j(document).keydown(function(e){keyHandler(e);});
-$j(document).keyup(function(e){
-	$j(document).keydown(function(e){
+$(document).keydown(function(e){keyHandler(e);});
+$(document).keyup(function(e){
+	$(document).keydown(function(e){
 		keyHandler(e);
 	});
 });
@@ -145,9 +144,9 @@ function Draw_Chart_NoData(txtchartname,texttodisplay){
 }
 
 function Draw_Chart(txtchartname){
-	var chartperiod = getChartPeriod($j('#'+txtchartname+'_Period option:selected').val());
-	var charttype = getChartType($j('#'+txtchartname+'_Type option:selected').val());
-	var chartclientraw = $j('#'+txtchartname+'_Clients option:selected').text();
+	var chartperiod = getChartPeriod($('#'+txtchartname+'_Period option:selected').val());
+	var charttype = getChartType($('#'+txtchartname+'_Type option:selected').val());
+	var chartclientraw = $('#'+txtchartname+'_Clients option:selected').text();
 
 	var chartclient = chartclientraw.substring(chartclientraw.indexOf('(')+1,chartclientraw.indexOf(')',chartclientraw.indexOf('(')+1))
 
@@ -176,7 +175,7 @@ function Draw_Chart(txtchartname){
 		}).map(function(d){return d.ReqDmn});
 	}
 
-	$j.each(chartLabels,function(index,value){
+	$.each(chartLabels,function(index,value){
 		chartLabels[index] = chunk(value.toLowerCase(),30).join('\n');
 	});
 
@@ -225,7 +224,7 @@ function Draw_Chart(txtchartname){
 		scales: {
 			xAxes: [{
 				display: showAxis(charttype,'x'),
-				type: getChartScale($j('#'+txtchartname+'_Scale option:selected').val(),charttype,'x'),
+				type: getChartScale($('#'+txtchartname+'_Scale option:selected').val(),charttype,'x'),
 				gridLines: {
 					display: showGrid(charttype,'x'),
 					color: '#282828'
@@ -246,7 +245,7 @@ function Draw_Chart(txtchartname){
 			}],
 			yAxes: [{
 				display: showAxis(charttype,'y'),
-				type: getChartScale($j('#'+txtchartname+'_Scale option:selected').val(),charttype,'y'),
+				type: getChartScale($('#'+txtchartname+'_Scale option:selected').val(),charttype,'y'),
 				gridLines: {
 					display: false,
 					color: '#282828'
@@ -327,10 +326,10 @@ function Draw_Chart(txtchartname){
 }
 
 function Draw_Time_Chart(txtchartname){
-	var chartperiod = getChartPeriod($j('#'+txtchartname+'time_Period option:selected').val());
+	var chartperiod = getChartPeriod($('#'+txtchartname+'time_Period option:selected').val());
 	var txttitle = 'DNS Queries';
-	var txtunitx = timeunitlist[$j('#'+txtchartname+'time_Period option:selected').val()];
-	var numunitx = intervallist[$j('#'+txtchartname+'time_Period option:selected').val()];
+	var txtunitx = timeunitlist[$('#'+txtchartname+'time_Period option:selected').val()];
+	var numunitx = intervallist[$('#'+txtchartname+'time_Period option:selected').val()];
 	var dataobject = window[txtchartname+chartperiod+'time'];
 
 	if(typeof dataobject === 'undefined' || dataobject === null){ Draw_Chart_NoData(txtchartname+'time','No data to display'); return; }
@@ -387,7 +386,7 @@ function Draw_Time_Chart(txtchartname){
 				time: { parser: 'X',unit: txtunitx,stepSize: 1 }
 			}],
 			yAxes: [{
-				type: getChartScale($j('#'+txtchartname+'time_Scale option:selected').val(),'time','y'),
+				type: getChartScale($('#'+txtchartname+'time_Scale option:selected').val(),'time','y'),
 				gridLines: { display: false,color: '#282828' },
 				scaleLabel: { display: false,labelString: txttitle },
 				ticks: {
@@ -539,12 +538,12 @@ function initial(){
 	get_conf_file();
 	get_domainstoexclude_file();
 
-	$j('#sortTableContainer').empty();
-	$j('#sortTableContainer').append(BuildQueryLogTableHtmlNoData());
+	$('#sortTableContainer').empty();
+	$('#sortTableContainer').append(BuildQueryLogTableHtmlNoData());
 
-	$j('#td_charts').append(BuildChartHtml('DNS Queries','TotalBlockedtime','true','false'));
-	$j('#td_charts').append(BuildChartHtml('Top blocked domains','Blocked','false','true'));
-	$j('#td_charts').append(BuildChartHtml('Top requested domains','Total','false','true'));
+	$('#td_charts').append(BuildChartHtml('DNS Queries','TotalBlockedtime','true','false'));
+	$('#td_charts').append(BuildChartHtml('Top blocked domains','Blocked','false','true'));
+	$('#td_charts').append(BuildChartHtml('Top requested domains','Total','false','true'));
 
 	get_sqldata_file();
 	get_querylog_file();
@@ -553,7 +552,7 @@ function initial(){
 }
 
 function get_sqldata_file(){
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/SQLData.js',
 		dataType: 'script',
 		timeout: 3000,
@@ -562,15 +561,15 @@ function get_sqldata_file(){
 		},
 		success: function(){
 			SetuiDivStatsTitle();
-			$j('#uidivstats_div_keystats').append(BuildKeyStatsTableHtml('Key Stats','keystats'));
-			$j('#keystats_Period').val(GetCookie('keystats_Period','number')).change();
+			$('#uidivstats_div_keystats').append(BuildKeyStatsTableHtml('Key Stats','keystats'));
+			$('#keystats_Period').val(GetCookie('keystats_Period','number')).change();
 			get_clients_file();
 		}
 	});
 }
 
 function get_clients_file(){
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/csv/ipdistinctclients.js',
 		dataType: 'script',
 		timeout: 3000,
@@ -580,10 +579,10 @@ function get_clients_file(){
 		success: function(){
 			for(var i = 0; i < metriclist.length; i++){
 				Draw_Chart_NoData(metriclist[i],'Data loading...');
-				$j('#'+metriclist[i]+'_Period').val(GetCookie(metriclist[i]+'_Period','number'));
-				$j('#'+metriclist[i]+'_Type').val(GetCookie(metriclist[i]+'_Type','number'));
-				$j('#'+metriclist[i]+'_Scale').val(GetCookie(metriclist[i]+'_Scale','number'));
-				ChartScaleOptions($j('#'+metriclist[i]+'_Type')[0]);
+				$('#'+metriclist[i]+'_Period').val(GetCookie(metriclist[i]+'_Period','number'));
+				$('#'+metriclist[i]+'_Type').val(GetCookie(metriclist[i]+'_Type','number'));
+				$('#'+metriclist[i]+'_Scale').val(GetCookie(metriclist[i]+'_Scale','number'));
+				ChartScaleOptions($('#'+metriclist[i]+'_Type')[0]);
 				for(var i2 = 0; i2 < chartlist.length; i2++){
 					d3.csv('/ext/uiDivStats/csv/'+metriclist[i]+chartlist[i2]+'.htm').then(SetGlobalDataset.bind(null,metriclist[i]+chartlist[i2]));
 					d3.csv('/ext/uiDivStats/csv/'+metriclist[i]+chartlist[i2]+'clients.htm').then(SetGlobalDataset.bind(null,metriclist[i]+chartlist[i2]+'clients'));
@@ -591,8 +590,8 @@ function get_clients_file(){
 			}
 			Draw_Chart_NoData('TotalBlockedtime','Data loading...');
 			for(var i = 0; i < chartlist.length; i++){
-				$j('#TotalBlockedtime_Period').val(GetCookie('TotalBlockedtime_Period','number'));
-				$j('#TotalBlockedtime_Scale').val(GetCookie('TotalBlockedtime_Scale','number'));
+				$('#TotalBlockedtime_Period').val(GetCookie('TotalBlockedtime_Period','number'));
+				$('#TotalBlockedtime_Scale').val(GetCookie('TotalBlockedtime_Scale','number'));
 				d3.csv('/ext/uiDivStats/csv/TotalBlocked'+chartlist[i]+'time.htm').then(SetGlobalDataset.bind(null,'TotalBlocked'+chartlist[i]+'time'));
 			}
 		}
@@ -600,7 +599,7 @@ function get_clients_file(){
 }
 
 function get_conf_file(){
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/config.htm',
 		dataType: 'text',
 		error: function(xhr){
@@ -618,7 +617,7 @@ function get_conf_file(){
 }
 
 function get_domainstoexclude_file(){
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/domainstoexclude.htm',
 		dataType: 'text',
 		error: function(xhr){
@@ -631,7 +630,7 @@ function get_domainstoexclude_file(){
 }
 
 function get_DivStats_file(){
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/DiversionStats.htm',
 		dataType: 'text',
 		error: function(xhr){
@@ -679,7 +678,7 @@ function SetGlobalDataset(txtchartname,dataobject){
 }
 
 function SetClients(txtchartname){
-	var dataobject = window[txtchartname+getChartPeriod($j('#'+txtchartname+'_Period option:selected').val())+'clients'];
+	var dataobject = window[txtchartname+getChartPeriod($('#'+txtchartname+'_Period option:selected').val())+'clients'];
 
 	var unique = [];
 	var chartClients = [];
@@ -695,7 +694,7 @@ function SetClients(txtchartname){
 		var arrclient = hostiparray.filter(function(item){
 			return item[0] == chartClients[i];
 		})[0];
-		$j('#'+txtchartname+'_Clients').append($j('<option>',{
+		$('#'+txtchartname+'_Clients').append($('<option>',{
 			value: i+1,
 			text: arrclient[1]+' ('+arrclient[0]+')'
 		}));
@@ -705,10 +704,10 @@ function SetClients(txtchartname){
 function ScriptUpdateLayout(){
 	var localver = GetVersionNumber('local');
 	var serverver = GetVersionNumber('server');
-	$j('#uidivstats_version_local').text(localver);
+	$('#uidivstats_version_local').text(localver);
 
 	if(localver != serverver && serverver != 'N/A'){
-		$j('#uidivstats_version_server').text('Updated version available: '+serverver);
+		$('#uidivstats_version_server').text('Updated version available: '+serverver);
 		showhide('btnChkUpdate',false);
 		showhide('uidivstats_version_server',true);
 		showhide('btnDoUpdate',true);
@@ -716,7 +715,7 @@ function ScriptUpdateLayout(){
 }
 
 function update_status(){
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/detect_update.js',
 		dataType: 'script',
 		timeout: 3000,
@@ -731,12 +730,12 @@ function update_status(){
 				document.getElementById('imgChkUpdate').style.display = 'none';
 				showhide('uidivstats_version_server',true);
 				if(updatestatus != 'None'){
-					$j('#uidivstats_version_server').text('Updated version available: '+updatestatus);
+					$('#uidivstats_version_server').text('Updated version available: '+updatestatus);
 					showhide('btnChkUpdate',false);
 					showhide('btnDoUpdate',true);
 				}
 				else{
-					$j('#uidivstats_version_server').text('No update available');
+					$('#uidivstats_version_server').text('No update available');
 					showhide('btnChkUpdate',true);
 					showhide('btnDoUpdate',false);
 				}
@@ -762,7 +761,7 @@ function DoUpdate(){
 
 function SaveConfig(){
 	if(Validate_All()){
-		document.getElementById('amng_custom').value = JSON.stringify($j('form').serializeObject());
+		document.getElementById('amng_custom').value = JSON.stringify($('form').serializeObject());
 		document.form.action_script.value = 'start_uiDivStatsconfig';
 		document.form.action_wait.value = 10;
 		showLoading();
@@ -782,10 +781,10 @@ function RefreshNow(){
 	setTimeout(get_querylog_file,5000);
 }
 
-$j.fn.serializeObject = function(){
+$.fn.serializeObject = function(){
 	var o = custom_settings;
 	var a = this.serializeArray();
-	$j.each(a,function(){
+	$.each(a,function(){
 		if(o[this.name] !== undefined && this.name.indexOf('uidivstats') != -1 && this.name.indexOf('version') == -1 && this.name.indexOf('domainstoexclude') == -1){
 			if(!o[this.name].push){
 				o[this.name] = [o[this.name]];
@@ -818,9 +817,9 @@ function GetVersionNumber(versiontype){
 }
 
 function RedrawAllCharts(){
-	$j('#td_charts').append(BuildChartHtml('DNS Queries','TotalBlockedtime','true','false'));
-	$j('#td_charts').append(BuildChartHtml('Top blocked domains','Blocked','false','true'));
-	$j('#td_charts').append(BuildChartHtml('Top requested domains','Total','false','true'));
+	$('#td_charts').append(BuildChartHtml('DNS Queries','TotalBlockedtime','true','false'));
+	$('#td_charts').append(BuildChartHtml('Top blocked domains','Blocked','false','true'));
+	$('#td_charts').append(BuildChartHtml('Top requested domains','Total','false','true'));
 
 	get_sqldata_file();
 
@@ -832,10 +831,10 @@ function PostStatUpdate(){
 	currentNoChartsTotal = 0;
 	currentNoChartsTotalBlocked = 0;
 	currentNoChartsOverall = 0;
-	$j('#uidivstats_div_keystats').empty();
-	$j('#uidivstats_chart_TotalBlockedtime').remove();
-	$j('#uidivstats_chart_Blocked').remove();
-	$j('#uidivstats_chart_Total').remove();
+	$('#uidivstats_div_keystats').empty();
+	$('#uidivstats_chart_TotalBlockedtime').remove();
+	$('#uidivstats_chart_Blocked').remove();
+	$('#uidivstats_chart_Total').remove();
 	setTimeout(RedrawAllCharts,3000);
 }
 
@@ -856,7 +855,7 @@ function StartUpdateStatsInterval(){
 var statcount=2;
 function update_uidivstats(){
 	statcount++;
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/detect_uidivstats.js',
 		dataType: 'script',
 		timeout: 1000,
@@ -994,19 +993,19 @@ function getChartScale(scale,charttype,axis){
 
 function ChartScaleOptions(e){
 	var chartname = e.id.substring(0,e.id.indexOf('_'));
-	let dropdown = $j('#'+chartname+'_Scale');
-	if($j('#'+chartname+'_Type option:selected').val() != 2){
+	let dropdown = $('#'+chartname+'_Scale');
+	if($('#'+chartname+'_Type option:selected').val() != 2){
 		if(dropdown[0].length == 1){
 			dropdown.empty();
-			dropdown.append($j('<option></option>').attr('value',0).text('Linear'));
-			dropdown.append($j('<option></option>').attr('value',1).text('Logarithmic'));
+			dropdown.append($('<option></option>').attr('value',0).text('Linear'));
+			dropdown.append($('<option></option>').attr('value',1).text('Logarithmic'));
 			dropdown.prop('selectedIndex',0);
 		}
 	}
 	else{
 		if(dropdown[0].length == 2){
 			dropdown.empty();
-			dropdown.append($j('<option></option>').attr('value',0).text('Linear'));
+			dropdown.append($('<option></option>').attr('value',0).text('Linear'));
 			dropdown.prop('selectedIndex',0);
 		}
 	}
@@ -1195,7 +1194,7 @@ function changeChart(e){
 	}
 	if(e.id.indexOf('Period') != -1){
 		if(e.id.indexOf('TotalBlocked') == -1){
-			$j('#'+name+'_Clients option[value!=0]').remove();
+			$('#'+name+'_Clients option[value!=0]').remove();
 			SetClients(name);
 		}
 	}
@@ -1214,9 +1213,9 @@ function changeTable(e){
 
 	var tableperiod = getChartPeriod(value);
 
-	$j('#keystatstotal').text(window['QueriesTotal'+tableperiod]);
-	$j('#keystatsblocked').text(window['QueriesBlocked'+tableperiod]);
-	$j('#keystatspercent').text(window['BlockedPercentage'+tableperiod]);
+	$('#keystatstotal').text(window['QueriesTotal'+tableperiod]);
+	$('#keystatsblocked').text(window['QueriesBlocked'+tableperiod]);
+	$('#keystatspercent').text(window['BlockedPercentage'+tableperiod]);
 }
 
 function BuildChartHtml(txttitle,txtbase,istime,perip){
@@ -1373,7 +1372,7 @@ function BuildQueryLogTableHtml(){
 }
 
 function get_querylog_file(){
-	$j.ajax({
+	$.ajax({
 		url: '/ext/uiDivStats/csv/SQLQueryLog.htm',
 		dataType: 'text',
 		error: function(xhr){
@@ -1409,47 +1408,47 @@ function ParseQueryLog(data){
 }
 
 function FilterQueryLog(){
-	if( $j('#filter_reqdmn').val() == '' && $j('#filter_srcip').val() == '' && $j('#filter_qrytype option:selected').val() == 0 && $j('#filter_result option:selected').val() == 0 ){
+	if( $('#filter_reqdmn').val() == '' && $('#filter_srcip').val() == '' && $('#filter_qrytype option:selected').val() == 0 && $('#filter_result option:selected').val() == 0 ){
 		arrayqueryloglines = originalarrayqueryloglines;
 	}
 	else{
 		arrayqueryloglines = originalarrayqueryloglines;
 
-		if($j('#filter_reqdmn').val() != '' ){
-			if($j('#filter_reqdmn').val().startsWith('!')){
+		if($('#filter_reqdmn').val() != '' ){
+			if($('#filter_reqdmn').val().startsWith('!')){
 				arrayqueryloglines = arrayqueryloglines.filter(function(item){
-					return item.ReqDmn.toLowerCase().indexOf($j('#filter_reqdmn').val().replace('!','').toLowerCase()) == -1;
+					return item.ReqDmn.toLowerCase().indexOf($('#filter_reqdmn').val().replace('!','').toLowerCase()) == -1;
 				});
 			}
 			else{
 				arrayqueryloglines = arrayqueryloglines.filter(function(item){
-					return item.ReqDmn.toLowerCase().indexOf($j('#filter_reqdmn').val().toLowerCase()) != -1;
+					return item.ReqDmn.toLowerCase().indexOf($('#filter_reqdmn').val().toLowerCase()) != -1;
 				});
 			}
 		}
 
-		if( $j('#filter_srcip').val() != '' ){
-			if($j('#filter_srcip').val().startsWith('!')){
+		if( $('#filter_srcip').val() != '' ){
+			if($('#filter_srcip').val().startsWith('!')){
 				arrayqueryloglines = arrayqueryloglines.filter(function(item){
-					return item.SrcIP.indexOf($j('#filter_srcip').val().replace('!','')) == -1;
+					return item.SrcIP.indexOf($('#filter_srcip').val().replace('!','')) == -1;
 				});
 			}
 			else{
 				arrayqueryloglines = arrayqueryloglines.filter(function(item){
-					return item.SrcIP.indexOf($j('#filter_srcip').val()) != -1;
+					return item.SrcIP.indexOf($('#filter_srcip').val()) != -1;
 				});
 			}
 		}
 
-		if( $j('#filter_qrytype option:selected').val() != 0 ){
+		if( $('#filter_qrytype option:selected').val() != 0 ){
 			arrayqueryloglines = arrayqueryloglines.filter(function(item){
-				return item.QryType == $j('#filter_qrytype option:selected').text();
+				return item.QryType == $('#filter_qrytype option:selected').text();
 			});
 		}
 
-		if( $j('#filter_result option:selected').val() != 0 ){
+		if( $('#filter_result option:selected').val() != 0 ){
 			arrayqueryloglines = arrayqueryloglines.filter(function(item){
-				return item.Result == $j('#filter_result option:selected').text();
+				return item.Result == $('#filter_result option:selected').text();
 			});
 		}
 
@@ -1491,10 +1490,10 @@ function SortTable(sorttext){
 		sortdir = 'desc';
 	}
 
-	$j('#sortTableContainer').empty();
-	$j('#sortTableContainer').append(BuildQueryLogTableHtml());
+	$('#sortTableContainer').empty();
+	$('#sortTableContainer').append(BuildQueryLogTableHtml());
 
-	$j('.sortable').each(function(index,element){
+	$('.sortable').each(function(index,element){
 		if(element.innerHTML == sortname){
 			if(sortdir == 'asc'){
 				element.innerHTML = sortname+' ↑';
@@ -1507,45 +1506,45 @@ function SortTable(sorttext){
 }
 
 function Assign_EventHandlers(){
-	$j('.collapsible-jquery').off('click').on('click',function(){
-		$j(this).siblings().toggle('fast',function(){
-			if($j(this).css('display') == 'none'){
-				SetCookie($j(this).siblings()[0].id,'collapsed');
+	$('.collapsible-jquery').off('click').on('click',function(){
+		$(this).siblings().toggle('fast',function(){
+			if($(this).css('display') == 'none'){
+				SetCookie($(this).siblings()[0].id,'collapsed');
 			}
 			else{
-				SetCookie($j(this).siblings()[0].id,'expanded');
+				SetCookie($(this).siblings()[0].id,'expanded');
 			}
 		})
 	});
 
-	$j('.collapsible-jquery').each(function(index,element){
-		if(GetCookie($j(this)[0].id,'string') == 'collapsed'){
-			$j(this).siblings().toggle(false);
+	$('.collapsible-jquery').each(function(index,element){
+		if(GetCookie($(this)[0].id,'string') == 'collapsed'){
+			$(this).siblings().toggle(false);
 		}
 		else{
-			$j(this).siblings().toggle(true);
+			$(this).siblings().toggle(true);
 		}
 	});
 
 	let timeoutreqdmn = null;
 	let timeoutsrcip = null;
 
-	$j('#filter_reqdmn').off('keyup touchend').on('keyup touchend',function (e){
+	$('#filter_reqdmn').off('keyup touchend').on('keyup touchend',function (e){
 		clearTimeout(timeoutreqdmn);
 		timeoutreqdmn = setTimeout(function(){
 			FilterQueryLog();
 		},1000);
 	});
 
-	$j('#filter_srcip').off('keyup touchend').on('keyup touchend',function (e){
+	$('#filter_srcip').off('keyup touchend').on('keyup touchend',function (e){
 		clearTimeout(timeoutsrcip);
 		timeoutsrcip = setTimeout(function(){
 			FilterQueryLog();
 		},1000);
 	});
-	$j('#auto_refresh').off('click').on('click',function(){ToggleRefresh();});
+	$('#auto_refresh').off('click').on('click',function(){ToggleRefresh();});
 }
 
 function ToggleRefresh(){
-	$j('#auto_refresh').prop('checked',function(i,v){ if(v){get_querylog_file();} else{clearTimeout(tout);} });
+	$('#auto_refresh').prop('checked',function(i,v){ if(v){get_querylog_file();} else{clearTimeout(tout);} });
 }
