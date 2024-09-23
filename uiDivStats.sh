@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Sep-08
+# Last Modified: 2024-Sep-22
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -55,6 +55,13 @@ readonly PASS="\\e[32m"
 readonly BOLD="\\e[1m"
 readonly SETTING="${BOLD}\\e[36m"
 readonly CLEARFORMAT="\\e[0m"
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Sep-22] ##
+##-------------------------------------##
+readonly REDct="\033[1;31m\033[1m"
+readonly CLEARct="\033[0m"
+
 ### End of output format variables ###
 
 # $1 = print to syslog, $2 = message to print, $3 = log level
@@ -187,8 +194,10 @@ Update_Check(){
 	echo "$doupdate,$localver,$serverver"
 }
 
-Update_Version(){
-	if [ -z "$1" ]; then
+Update_Version()
+{
+	if [ $# -eq 0 ] || [ -z "$1" ]
+	then
 		updatecheckresult="$(Update_Check)"
 		isupdate="$(echo "$updatecheckresult" | cut -f1 -d',')"
 		localver="$(echo "$updatecheckresult" | cut -f2 -d',')"
@@ -199,7 +208,6 @@ Update_Version(){
 		elif [ "$isupdate" = "md5" ]; then
 			Print_Output true "MD5 hash of $SCRIPT_NAME does not match - hotfix available - $serverver" "$PASS"
 		fi
-
 
 		if [ "$isupdate" != "false" ]; then
 			printf "\\n${BOLD}Do you want to continue with the update? (y/n)${CLEARFORMAT}  "
@@ -232,7 +240,8 @@ Update_Version(){
 		fi
 	fi
 
-	if [ "$1" = "force" ]; then
+	if [ "$1" = "force" ]
+	then
 		serverver=$(/usr/sbin/curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep "SCRIPT_VERSION=" | grep -m1 -oE 'v[0-9]{1,2}([.][0-9]{1,2})([.][0-9]{1,2})')
 		Print_Output true "Downloading latest version ($serverver) of $SCRIPT_NAME" "$PASS"
 		Update_File uidivstats_www.asp
@@ -2137,7 +2146,8 @@ EOF
 }
 ### ###
 
-if [ -z "$1" ]; then
+if [ $# -eq 0 ] || [ -z "$1" ]
+then
 	NTP_Ready
 	Entware_Ready
 	Create_Dirs
@@ -2157,6 +2167,9 @@ if [ -z "$1" ]; then
 	exit 0
 fi
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Sep-22] ##
+##----------------------------------------##
 case "$1" in
 	install)
 		Check_Lock
@@ -2282,7 +2295,13 @@ case "$1" in
 		exit 0
 	;;
 	develop)
-		SCRIPT_BRANCH="develop"
+		if false  ## The "develop" branch is NOT supported on this repository ##
+		then
+		    SCRIPT_BRANCH="develop"
+		else
+		    SCRIPT_BRANCH="master"
+		    printf "\n${REDct}The 'develop' branch is NOT available. Updating from the 'master' branch...${CLEARct}\n"
+		fi
 		SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 		Update_Version force
 		exit 0
