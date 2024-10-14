@@ -1,7 +1,7 @@
 # uiDivStats - WebUI for Diversion statistics
 
 ## v4.0.2
-### Updated on 2024-Sep-22 by @decoderman with updates from @Martinski4GitHub
+### Updated on 2024-Oct-13 by @decoderman with updates from @Martinski4GitHub
 
 ## About
 A graphical representation of domain blocking performed by Diversion.
