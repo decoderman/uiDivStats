@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Jul-01
+# Last Modified: 2024-Oct-13
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -28,7 +28,7 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.1"
+readonly SCRIPT_VERSION="v4.0.2"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -41,10 +41,18 @@ readonly SHARED_REPO="https://raw.githubusercontent.com/decoderman/shared-jy/mas
 readonly SHARED_WEB_DIR="$SCRIPT_WEBPAGE_DIR/shared-jy"
 readonly DNS_DB="$SCRIPT_USB_DIR/dnsqueries.db"
 readonly CSV_OUTPUT_DIR="$SCRIPT_USB_DIR/csv"
-[ -z "$(nvram get odmpid)" ] && ROUTER_MODEL=$(nvram get productid) || ROUTER_MODEL=$(nvram get odmpid)
+[ -z "$(nvram get odmpid)" ] && ROUTER_MODEL="$(nvram get productid)" || ROUTER_MODEL="$(nvram get odmpid)"
 SQLITE3_PATH="/opt/bin/sqlite3"
 readonly DIVERSION_DIR="/opt/share/diversion"
 readonly STATSEXCLUDE_LIST_FILE="$SCRIPT_DIR/statsexcludelist"
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Oct-13] ##
+##-------------------------------------##
+# For daily CRON job to trim database #
+readonly defTrimDB_Hour=0
+readonly defTrimDB_Mins=1
+
 ### End of script variables ###
 
 ### Start of output format variables ###
@@ -55,6 +63,14 @@ readonly PASS="\\e[32m"
 readonly BOLD="\\e[1m"
 readonly SETTING="${BOLD}\\e[36m"
 readonly CLEARFORMAT="\\e[0m"
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Sep-22] ##
+##-------------------------------------##
+readonly REDct="\033[1;31m\033[1m"
+readonly GRNct="\033[1;32m\033[1m"
+readonly CLEARct="\033[0m"
+
 ### End of output format variables ###
 
 # $1 = print to syslog, $2 = message to print, $3 = log level
@@ -187,8 +203,10 @@ Update_Check(){
 	echo "$doupdate,$localver,$serverver"
 }
 
-Update_Version(){
-	if [ -z "$1" ]; then
+Update_Version()
+{
+	if [ $# -eq 0 ] || [ -z "$1" ]
+	then
 		updatecheckresult="$(Update_Check)"
 		isupdate="$(echo "$updatecheckresult" | cut -f1 -d',')"
 		localver="$(echo "$updatecheckresult" | cut -f2 -d',')"
@@ -199,7 +217,6 @@ Update_Version(){
 		elif [ "$isupdate" = "md5" ]; then
 			Print_Output true "MD5 hash of $SCRIPT_NAME does not match - hotfix available - $serverver" "$PASS"
 		fi
-
 
 		if [ "$isupdate" != "false" ]; then
 			printf "\\n${BOLD}Do you want to continue with the update? (y/n)${CLEARFORMAT}  "
@@ -232,7 +249,8 @@ Update_Version(){
 		fi
 	fi
 
-	if [ "$1" = "force" ]; then
+	if [ "$1" = "force" ]
+	then
 		serverver=$(/usr/sbin/curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep "SCRIPT_VERSION=" | grep -m1 -oE 'v[0-9]{1,2}([.][0-9]{1,2})([.][0-9]{1,2})')
 		Print_Output true "Downloading latest version ($serverver) of $SCRIPT_NAME" "$PASS"
 		Update_File uidivstats_www.asp
@@ -412,21 +430,41 @@ Create_Symlinks(){
 	fi
 }
 
-Conf_Exists(){
-	if [ -f "$SCRIPT_CONF" ]; then
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-13] ##
+##----------------------------------------##
+Conf_Exists()
+{
+	if [ -f "$SCRIPT_CONF" ]
+	then
 		dos2unix "$SCRIPT_CONF"
 		chmod 0644 "$SCRIPT_CONF"
 		sed -i -e 's/"//g' "$SCRIPT_CONF"
-		if ! grep -q "DAYSTOKEEP" "$SCRIPT_CONF"; then
+		if ! grep -q "^DAYSTOKEEP=" "$SCRIPT_CONF"; then
 			echo "DAYSTOKEEP=30" >> "$SCRIPT_CONF"
 		fi
-		if ! grep -q "LASTXQUERIES" "$SCRIPT_CONF"; then
+		if ! grep -q "^TRIMDB_HOUR=" "$SCRIPT_CONF"; then
+			echo "TRIMDB_HOUR=$defTrimDB_Hour" >> "$SCRIPT_CONF"
+		fi
+		if ! grep -q "^TRIMDB_MINS=" "$SCRIPT_CONF"; then
+			echo "TRIMDB_MINS=$defTrimDB_Mins" >> "$SCRIPT_CONF"
+		fi
+		if ! grep -q "^LASTXQUERIES=" "$SCRIPT_CONF"; then
 			echo "LASTXQUERIES=5000" >> "$SCRIPT_CONF"
 		fi
-		sed -i -e 's/QUERYMODE=A+AAAA$/QUERYMODE=A+AAAA+HTTPS/g' "$SCRIPT_CONF"
+		if ! grep -q "^CACHEMODE=" "$SCRIPT_CONF"; then
+			echo "CACHEMODE=tmp" >> "$SCRIPT_CONF"
+		fi
+		if ! grep -q "^QUERYMODE=" "$SCRIPT_CONF"; then
+			echo "QUERYMODE=all" >> "$SCRIPT_CONF"
+		fi
+		sed -i -e 's/^QUERYMODE=A+AAAA$/QUERYMODE=A+AAAA+HTTPS/g' "$SCRIPT_CONF"
 		return 0
 	else
-		{ echo "QUERYMODE=all"; echo "CACHEMODE=tmp"; echo "DAYSTOKEEP=30"; echo "LASTXQUERIES=5000"; } > "$SCRIPT_CONF"
+		{ echo "QUERYMODE=all"; echo "CACHEMODE=tmp"
+		  echo "DAYSTOKEEP=30"; echo "LASTXQUERIES=5000"
+		  echo "TRIMDB_HOUR=$defTrimDB_Hour" ; echo "TRIMDB_MINS=$defTrimDB_Mins"
+		} > "$SCRIPT_CONF"
 		return 1
 	fi
 }
@@ -511,7 +549,12 @@ Auto_Startup(){
 	esac
 }
 
-Auto_Cron(){
+
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-13] ##
+##----------------------------------------##
+Auto_Cron()
+{
 	case $1 in
 		create)
 			STARTUPLINECOUNTGENERATE=$(cru l | grep -c "${SCRIPT_NAME}_generate")
@@ -524,9 +567,11 @@ Auto_Cron(){
 				cru d "${SCRIPT_NAME}_generate"
 			fi
 
-			STARTUPLINECOUNTEXTRIM=$(cru l | grep "${SCRIPT_NAME}_trim" | grep -c "1" )
-			if [ "$STARTUPLINECOUNTTRIM" -ne 0 ] && [ "$STARTUPLINECOUNTEXTRIM" -eq 0 ]; then
+			STARTUPLINECOUNTEXTRIM=$(cru l | grep "${SCRIPT_NAME}_trim" | grep -c "^$(_TrimDatabaseTime_ mins)" )
+			if [ "$STARTUPLINECOUNTTRIM" -ne 0 ] && [ "$STARTUPLINECOUNTEXTRIM" -eq 0 ]
+			then
 				cru d "${SCRIPT_NAME}_trim"
+				STARTUPLINECOUNTTRIM=$(cru l | grep -c "${SCRIPT_NAME}_trim")
 			fi
 
 			STARTUPLINECOUNTEXFLUSHTODB=$(cru l | grep "${SCRIPT_NAME}_flushtodb" | grep -c "4-59/5" )
@@ -538,7 +583,7 @@ Auto_Cron(){
 				cru a "${SCRIPT_NAME}_generate" "0 1-23 * * * /jffs/scripts/$SCRIPT_NAME generate"
 			fi
 			if [ "$STARTUPLINECOUNTTRIM" -eq 0 ]; then
-				cru a "${SCRIPT_NAME}_trim" "1 0 * * * /jffs/scripts/$SCRIPT_NAME trimdb"
+				cru a "${SCRIPT_NAME}_trim" "$(_TrimDatabaseTime_ mins) $(_TrimDatabaseTime_ hour) * * * /jffs/scripts/$SCRIPT_NAME trimdb"
 			fi
 			if [ "$STARTUPLINECOUNTQUERYLOG" -eq 0 ]; then
 				cru a "${SCRIPT_NAME}_querylog" "* * * * * /jffs/scripts/$SCRIPT_NAME querylog"
@@ -686,7 +731,8 @@ Mount_WebUI(){
 	Print_Output true "Mounted $SCRIPT_NAME WebUI page as $MyPage" "$PASS"
 }
 
-QueryMode(){
+QueryMode()
+{
 	case "$1" in
 		all)
 			sed -i 's/^QUERYMODE.*$/QUERYMODE=all/' "$SCRIPT_CONF"
@@ -701,13 +747,14 @@ QueryMode(){
 			/opt/etc/init.d/S90taildns start >/dev/null 2>&1
 		;;
 		check)
-			QUERYMODE="$(grep "QUERYMODE" "$SCRIPT_CONF" | cut -f2 -d"=")"
-			echo "$QUERYMODE"
+			QUERYMODE="$(grep "^QUERYMODE=" "$SCRIPT_CONF" | cut -f2 -d"=")"
+			echo "${QUERYMODE:=all}"
 		;;
 	esac
 }
 
-CacheMode(){
+CacheMode()
+{
 	case "$1" in
 		none)
 			sed -i 's/^CACHEMODE.*$/CACHEMODE=none/' "$SCRIPT_CONF"
@@ -723,89 +770,253 @@ CacheMode(){
 			/opt/etc/init.d/S90taildns start >/dev/null 2>&1
 		;;
 		check)
-			CACHEMODE="$(grep "CACHEMODE" "$SCRIPT_CONF" | cut -f2 -d"=")"
-			echo "$CACHEMODE"
+			CACHEMODE="$(grep "^CACHEMODE=" "$SCRIPT_CONF" | cut -f2 -d"=")"
+			echo "${CACHEMODE:=tmp}"
 		;;
 	esac
 }
 
-DaysToKeep(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-13] ##
+##----------------------------------------##
+DaysToKeep()
+{
 	case "$1" in
 		update)
-			daystokeep=30
-			exitmenu=""
-			ScriptHeader
-			while true; do
-				printf "\\n${BOLD}Please enter the desired number of days\\nto keep data for (1-365 days):${CLEARFORMAT}  "
+			daysToKeep="$(DaysToKeep check)"
+			exitLoop=false
+			while true
+			do
+				ScriptHeader
+				printf "${BOLD}Current number of days to keep data: ${GRNct}${daysToKeep}${CLEARct}\n"
+				printf "\n${BOLD}Please enter the maximum number of days\nto keep data for [1-365] (e=Exit):${CLEARFORMAT}  "
 				read -r daystokeep_choice
-
-				if [ "$daystokeep_choice" = "e" ]; then
-					exitmenu="exit"
+				if [ -z "$daystokeep_choice" ] && \
+				   echo "$daysToKeep" | grep -qE "^([1-9][0-9]{0,2})$" && \
+				   [ "$daysToKeep" -gt 0 ] && [ "$daysToKeep" -le 365 ]
+				then
+					exitLoop=true
 					break
-				elif ! Validate_Number "$daystokeep_choice"; then
-					printf "\\n${ERR}Please enter a valid number (1-365)${CLEARFORMAT}\\n"
-				elif [ "$daystokeep_choice" -lt 1 ] || [ "$daystokeep_choice" -gt 365 ]; then
-						printf "\\n${ERR}Please enter a number between 1 and 365${CLEARFORMAT}\\n"
+				elif [ "$daystokeep_choice" = "e" ]
+				then
+					exitLoop=true
+					break
+				elif ! Validate_Number "$daystokeep_choice"
+				then
+					printf "\n${ERR}Please enter a valid number [1-365].${CLEARFORMAT}\n"
+					PressEnter
+				elif [ "$daystokeep_choice" -lt 1 ] || [ "$daystokeep_choice" -gt 365 ]
+				then
+					printf "\n${ERR}Please enter a number between 1 and 365.${CLEARFORMAT}\n"
+					PressEnter
 				else
-					daystokeep="$daystokeep_choice"
-					printf "\\n"
+					daysToKeep="$daystokeep_choice"
 					break
 				fi
 			done
 
-			if [ "$exitmenu" != "exit" ]; then
-				sed -i 's/^DAYSTOKEEP.*$/DAYSTOKEEP='"$daystokeep"'/' "$SCRIPT_CONF"
-				return 0
+			if "$exitLoop"
+			then
+				echo ; return 1
 			else
-				printf "\\n"
-				return 1
+				DAYSTOKEEP="$daysToKeep"
+				sed -i 's/^DAYSTOKEEP.*$/DAYSTOKEEP='"$DAYSTOKEEP"'/' "$SCRIPT_CONF"
+				echo ; return 0
 			fi
 		;;
 		check)
-			DAYSTOKEEP=$(grep "DAYSTOKEEP" "$SCRIPT_CONF" | cut -f2 -d"=")
-			echo "$DAYSTOKEEP"
+			DAYSTOKEEP="$(grep "^DAYSTOKEEP=" "$SCRIPT_CONF" | cut -f2 -d"=")"
+			echo "${DAYSTOKEEP:=30}"
 		;;
 	esac
 }
 
-LastXQueries(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-13] ##
+##----------------------------------------##
+LastXQueries()
+{
 	case "$1" in
 		update)
-			lastxquerieds=10
-			exitmenu=""
+			lastXQueries="$(LastXQueries check)"
+			exitLoop=false
 			ScriptHeader
-			while true; do
-				printf "\\n${BOLD}Please enter the desired number of queries\\nto display in the WebUI (10-10000):${CLEARFORMAT}  "
+			while true
+			do
+				ScriptHeader
+				printf "${BOLD}Current number of queries to display: ${GRNct}${lastXQueries}${CLEARct}\n"
+				printf "\n${BOLD}Please enter the maximum number of queries\nto display in the WebUI [10-10000] (e=Exit):${CLEARFORMAT}  "
 				read -r lastx_choice
-
-				if [ "$lastx_choice" = "e" ]; then
-					exitmenu="exit"
+				if [ -z "$lastx_choice" ] && \
+				   echo "$lastXQueries" | grep -qE "^([1-9][0-9]{1,4})$" && \
+				   [ "$lastXQueries" -ge 10 ] && [ "$lastXQueries" -le 10000 ]
+				then
+					exitLoop=true
 					break
-				elif ! Validate_Number "$lastx_choice"; then
-					printf "\\n${ERR}Please enter a valid number (10-10000)${CLEARFORMAT}\\n"
-				elif [ "$lastx_choice" -lt 10 ] || [ "$lastx_choice" -gt 10000 ]; then
-						printf "\\n${ERR}Please enter a number between 10 and 10000${CLEARFORMAT}\\n"
+				elif [ "$lastx_choice" = "e" ]
+				then
+					exitLoop=true
+					break
+				elif ! Validate_Number "$lastx_choice"
+				then
+					printf "\n${ERR}Please enter a valid number [10-10000].${CLEARFORMAT}\n"
+					PressEnter
+				elif [ "$lastx_choice" -lt 10 ] || [ "$lastx_choice" -gt 10000 ]
+				then
+					printf "\n${ERR}Please enter a number between 10 and 10000.${CLEARFORMAT}\n"
+					PressEnter
 				else
-					lastxquerieds="$lastx_choice"
-					printf "\\n"
+					lastXQueries="$lastx_choice"
 					break
 				fi
 			done
 
-			if [ "$exitmenu" != "exit" ]; then
-				sed -i 's/^LASTXQUERIES.*$/LASTXQUERIES='"$lastxquerieds"'/' "$SCRIPT_CONF"
-				Generate_Query_Log
-				return 0
+			if "$exitLoop"
+			then
+				echo ; return 1
 			else
-				printf "\\n"
-				return 1
+				LASTXQUERIES="$lastXQueries"
+				sed -i 's/^LASTXQUERIES.*$/LASTXQUERIES='"$LASTXQUERIES"'/' "$SCRIPT_CONF"
+				Generate_Query_Log
+				echo ; return 0
 			fi
 		;;
 		check)
-			LASTXQUERIES=$(grep "LASTXQUERIES" "$SCRIPT_CONF" | cut -f2 -d"=")
-			echo "$LASTXQUERIES"
+			LASTXQUERIES="$(grep "^LASTXQUERIES=" "$SCRIPT_CONF" | cut -f2 -d"=")"
+			echo "${LASTXQUERIES:=5000}"
 		;;
 	esac
+}
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Oct-13] ##
+##-------------------------------------##
+_ValidateCronJobHour_()
+{
+   if [ $# -eq 0 ] || [ -z "$1" ] ; then return 1 ; fi
+   if echo "$1" | grep -qE "^(0|[1-9][0-9]?)$" && \
+      [ "$1" -ge 0 ] && [ "$1" -lt 24 ]
+   then return 0 ; else return 1 ; fi
+}
+
+_ValidateCronJobMins_()
+{
+    if [ $# -eq 0 ] || [ -z "$1" ] ; then return 1 ; fi
+    if echo "$1" | grep -qE "^(0|[1-9][0-9]?)$" && \
+       [ "$1" -ge 0 ] && [ "$1" -lt 60 ]
+    then return 0 ; else return 1 ; fi
+}
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Oct-13] ##
+##-------------------------------------##
+_TrimDatabaseTime_()
+{
+   case "$1" in
+       update) 
+           trimDBhour="$(_TrimDatabaseTime_ hour)"
+           trimDBmins="$(_TrimDatabaseTime_ mins)"
+           trimDBtime12hr="$(_TrimDatabaseTime_ time12hr)"
+           trimDBtime24hr="$(_TrimDatabaseTime_ time24hr)"
+           getTrimDBhour=true ; exitTrimDBhour=false
+           getTrimDBmins=true ; exitTrimDBmins=false
+           while true
+           do
+               ScriptHeader
+               printf "${BOLD}Current schedule: ${GRNct}Daily at $trimDBtime24hr [$trimDBtime12hr]${CLEARct}\n"
+               if "$getTrimDBhour"
+               then
+                   printf "\n${BOLD}Enter schedule HOUR [0-23]:${CLEARFORMAT}  "
+                   read -r newTrimDBhour
+                   if [ -z "$newTrimDBhour" ] && _ValidateCronJobHour_ "$trimDBhour"
+                   then
+                       getTrimDBhour=false
+                       exitTrimDBhour=true
+                       if ! "$getTrimDBmins"
+                       then exitTrimDBmins=true ; break ; fi
+                   elif [ "$newTrimDBhour" = "exit" ]
+                   then
+                       getTrimDBhour=false
+                       exitTrimDBhour=true
+                       if ! "$getTrimDBmins"
+                       then exitTrimDBmins=true ; break ; fi
+                   elif ! _ValidateCronJobHour_ "$newTrimDBhour"
+                   then
+                       printf "\n${ERR}Please enter a valid hour [0-23].${CLEARFORMAT}\n"
+                       PressEnter
+                       continue
+                   else
+                       trimDBhour="$newTrimDBhour"
+                       getTrimDBhour=false
+                       if ! "$getTrimDBmins"
+                       then exitTrimDBmins=true ; break ; fi
+                   fi
+               else
+                   printf "\n${BOLD}Enter schedule HOUR [0-23]:${CLEARFORMAT}  ${newTrimDBhour}\n"
+               fi
+               if "$getTrimDBmins"
+               then
+                   printf "\n${BOLD}Enter schedule MINUTES [0-59]:${CLEARFORMAT}  "
+                   read -r newTrimDBmins
+                   if [ -z "$newTrimDBmins" ] && _ValidateCronJobMins_ "$trimDBmins"
+                   then
+                       getTrimDBmins=false
+                       exitTrimDBmins=true
+                       break
+                   elif [ "$newTrimDBmins" = "exit" ]
+                   then
+                       getTrimDBmins=false
+                       exitTrimDBmins=true
+                       break
+                   elif ! _ValidateCronJobMins_ "$newTrimDBmins"
+                   then
+                       printf "\n${ERR}Please enter valid minutes [0-59].${CLEARFORMAT}\n"
+                       PressEnter
+                       continue
+                   else
+                       trimDBmins="$newTrimDBmins"
+                       getTrimDBmins=false
+                       break
+                   fi
+               fi
+           done
+
+           if "$exitTrimDBhour" && "$exitTrimDBmins"
+           then
+               echo ; return 1
+           else
+               TRIMDB_HOUR="$trimDBhour"
+               TRIMDB_MINS="$trimDBmins"
+               sed -i 's/^TRIMDB_HOUR.*$/TRIMDB_HOUR='"$TRIMDB_HOUR"'/' "$SCRIPT_CONF"
+               sed -i 's/^TRIMDB_MINS.*$/TRIMDB_MINS='"$TRIMDB_MINS"'/' "$SCRIPT_CONF"
+               cru a "${SCRIPT_NAME}_trim" "$TRIMDB_MINS $TRIMDB_HOUR * * * /jffs/scripts/$SCRIPT_NAME trimdb"
+               echo ; return 0
+           fi
+           ;;
+       hour)
+           TRIMDB_HOUR="$(grep "^TRIMDB_HOUR=" "$SCRIPT_CONF" | cut -f2 -d"=")"
+           echo "${TRIMDB_HOUR:=$defTrimDB_Hour}"
+           ;;
+       mins)
+           TRIMDB_MINS="$(grep "^TRIMDB_MINS=" "$SCRIPT_CONF" | cut -f2 -d"=")"
+           echo "${TRIMDB_MINS:=$defTrimDB_Mins}"
+           ;;
+       time24hr)
+           printf "%02d:%02d" "$(_TrimDatabaseTime_ hour)" "$(_TrimDatabaseTime_ mins)"
+           ;;
+       time12hr)
+           ampmTag="AM"
+           trimDBhour="$(_TrimDatabaseTime_ hour)"
+           if [ "$trimDBhour" -eq 0 ]
+           then trimDBhour=12
+           elif [ "$trimDBhour" -eq 12 ]
+           then ampmTag="PM"
+           elif [ "$trimDBhour" -gt 12 ]
+           then trimDBhour="$((trimDBhour - 12))" ; ampmTag="PM"
+           fi
+           printf "%02d:%02d $ampmTag" "$trimDBhour" "$(_TrimDatabaseTime_ mins)"
+           ;;
+   esac
 }
 
 UpdateDiversionWeeklyStatsFile(){
@@ -1034,7 +1245,8 @@ Write_KeyStats_Sql_ToFile(){
 	fi
 }
 
-Generate_NG(){
+Generate_NG()
+{
 	TZ=$(cat /etc/TZ)
 	export TZ
 
@@ -1054,7 +1266,8 @@ Generate_NG(){
 	done
 	rm -f /tmp/uidivstats-trim.sql
 
-	if [ -n "$1" ] && [ "$1" = "fullrefresh" ]; then
+	if [ $# -gt 0 ] && [ -n "$1" ] && [ "$1" = "fullrefresh" ]
+	then
 		Write_View_Sql_ToFile drop dnsqueries daily /tmp/uidivstats.sql
 		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
 			sleep 1
@@ -1085,14 +1298,16 @@ Generate_NG(){
 	rm -f /tmp/uidivstats.sql
 
 	TempTime_Table create dnsqueries 0.25 daily
-	if [ -n "$1" ] && [ "$1" = "fullrefresh" ]; then
+	if [ $# -gt 0 ] && [ -n "$1" ] && [ "$1" = "fullrefresh" ]
+	then
 		TempTime_Table create dnsqueries 1 weekly
 		TempTime_Table create dnsqueries 3 monthly
 	fi
 
 	Generate_Count_Blocklist_Domains
 
-	if [ -n "$1" ] && [ "$1" = "fullrefresh" ]; then
+	if [ $# -gt 0 ] && [ -n "$1" ] && [ "$1" = "fullrefresh" ]
+	then
 		Generate_KeyStats "$timenow" fullrefresh
 		Generate_Stats_From_SQLite "$timenow" fullrefresh
 	else
@@ -1101,7 +1316,8 @@ Generate_NG(){
 	fi
 
 	TempTime_Table drop daily
-	if [ -n "$1" ] && [ "$1" = "fullrefresh" ]; then
+	if [ $# -gt 0 ] && [ -n "$1" ] && [ "$1" = "fullrefresh" ]
+	then
 		TempTime_Table drop weekly
 		TempTime_Table drop monthly
 	fi
@@ -1152,7 +1368,8 @@ Generate_Query_Log(){
 	rm -f "$CSV_OUTPUT_DIR/SQLQueryLog.tmp"
 }
 
-Generate_KeyStats(){
+Generate_KeyStats()
+{
 	timenow="$1"
 
 	#daily
@@ -1179,7 +1396,8 @@ Generate_KeyStats(){
 
 	WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "QueriesTotaldaily,$queriesTotaldaily" "QueriesBlockeddaily,$queriesBlockeddaily" "BlockedPercentagedaily,$queriesPercentagedaily"
 
-	if [ -n "$2" ] && [ "$2" = "fullrefresh" ]; then
+	if [ $# -gt 1 ] && [ -n "$2" ] && [ "$2" = "fullrefresh" ]
+	then
 		#weekly
 		Write_KeyStats_Sql_ToFile Total dnsqueries weekly /tmp/uidivstats.sql
 		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
@@ -1243,7 +1461,8 @@ Generate_Count_Blocklist_Domains(){
 	WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "BlockedDomains,$blocklistdomains"
 }
 
-Generate_Stats_From_SQLite(){
+Generate_Stats_From_SQLite()
+{
 	timenow="$1"
 
 	metriclist="Total Blocked"
@@ -1269,7 +1488,8 @@ Generate_Stats_From_SQLite(){
 		sed -i '1i Fieldname,Time,QueryCount' "$CSV_OUTPUT_DIR/TotalBlockeddailytime.htm"
 
 		#weekly
-		if [ -n "$2" ] && [ "$2" = "fullrefresh" ]; then
+		if [ $# -gt 1 ] && [ -n "$2" ] && [ "$2" = "fullrefresh" ]
+		then
 			Write_Time_Sql_ToFile "$metric" dnsqueries 1 7 "$CSV_OUTPUT_DIR/$metric" weekly /tmp/uidivstats.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
 				sleep 1
@@ -1290,7 +1510,8 @@ Generate_Stats_From_SQLite(){
 		fi
 
 		#monthly
-		if [ -n "$2" ] && [ "$2" = "fullrefresh" ]; then
+		if [ $# -gt 1 ] && [ -n "$2" ] && [ "$2" = "fullrefresh" ]
+		then
 			Write_Time_Sql_ToFile "$metric" dnsqueries 3 30 "$CSV_OUTPUT_DIR/$metric" monthly /tmp/uidivstats.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
 				sleep 1
@@ -1569,7 +1790,11 @@ ScriptHeader(){
 	printf "\\n"
 }
 
-MainMenu(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-13] ##
+##----------------------------------------##
+MainMenu()
+{
 	printf "WebUI for %s is available at:\\n${SETTING}%s${CLEARFORMAT}\\n\\n" "$SCRIPT_NAME" "$(Get_WebUI_URL)"
 	printf "1.    Update Diversion Statistics (daily only)\\n\\n"
 	printf "2.    Update Diversion Statistics (daily, weekly and monthly)\\n"
@@ -1577,6 +1802,7 @@ MainMenu(){
 	printf "3.    Edit list of domains to exclude from %s statistics\\n\\n" "$SCRIPT_NAME"
 	printf "4.    Set number of recent DNS queries to show in WebUI\\n      Currently: ${SETTING}%s queries will be shown${CLEARFORMAT}\\n\\n" "$(LastXQueries check)"
 	printf "5.    Set number of days data to keep in database\\n      Currently: ${SETTING}%s days data will be kept${CLEARFORMAT}\\n\\n" "$(DaysToKeep check)"
+	printf "6.    Set time for daily cron job to trim the database\\n      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
 	printf "q.    Toggle query mode\\n      Currently ${SETTING}%s${CLEARFORMAT} query types will be logged\\n\\n" "$(QueryMode check)"
 	printf "c.    Toggle cache mode\\n      Currently ${SETTING}%s${CLEARFORMAT} being used to cache query records\\n\\n" "$(CacheMode check)"
 	printf "u.    Check for updates\\n"
@@ -1588,12 +1814,13 @@ MainMenu(){
 	printf "${BOLD}###################################################################${CLEARFORMAT}\\n"
 	printf "\\n"
 
-	while true; do
+	while true
+	do
 		printf "Choose an option:  "
 		read -r menu
 		case "$menu" in
 			1)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					Menu_GenerateStats
 				fi
@@ -1601,7 +1828,7 @@ MainMenu(){
 				break
 			;;
 			2)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					Menu_GenerateStats fullrefresh
 				fi
@@ -1609,28 +1836,31 @@ MainMenu(){
 				break
 			;;
 			3)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					Menu_EditExcludeList
 				fi
-				printf "\\n"
+				printf "\n"
 				PressEnter
 				break
 			;;
 			4)
-				printf "\\n"
-				LastXQueries update
-				PressEnter
+				printf "\n"
+				LastXQueries update && PressEnter
 				break
 			;;
 			5)
-				printf "\\n"
-				DaysToKeep update
-				PressEnter
+				printf "\n"
+				DaysToKeep update && PressEnter
+				break
+			;;
+			6)
+				printf "\n"
+				_TrimDatabaseTime_ update && PressEnter
 				break
 			;;
 			q)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					if [ "$(QueryMode check)" = "all" ]; then
 						QueryMode "A+AAAA+HTTPS"
@@ -1642,7 +1872,7 @@ MainMenu(){
 				break
 			;;
 			c)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					if [ "$(CacheMode check)" = "none" ]; then
 						CacheMode tmp
@@ -1735,7 +1965,8 @@ Check_Requirements(){
 			CHECKSFAILED="true"
 		fi
 
-		if ! /opt/bin/grep -q 'log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf; then
+		if ! /opt/bin/grep -q '^log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf
+		then
 			Print_Output false "Diversion logging not enabled!" "$ERR"
 			Print_Output false "Open Diversion and use option l to enable logging"
 			CHECKSFAILED="true"
@@ -1866,17 +2097,20 @@ Menu_Startup(){
 	Clear_Lock
 }
 
-Menu_GenerateStats(){
-	if /opt/bin/grep -q 'log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf; then
+Menu_GenerateStats()
+{
+	if /opt/bin/grep -q '^log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf
+	then
 		echo 'var uidivstatsstatus = "InProgress";' > /tmp/detect_uidivstats.js
 		renice 15 $$
-		if [ -n "$1" ] && [ "$1" = "fullrefresh" ]; then
+		if [ $# -gt 0 ] && [ -n "$1" ] && [ "$1" = "fullrefresh" ]
+		then
 			Print_Output true "Starting stat full refresh" "$PASS"
 		else
 			Print_Output true "Starting stat update" "$PASS"
 		fi
 		UpdateDiversionWeeklyStatsFile
-		Generate_NG "$1"
+		Generate_NG "$@"
 		renice 0 $$
 	else
 		Print_Output true "Diversion logging not enabled!" "$ERR"
@@ -1885,7 +2119,8 @@ Menu_GenerateStats(){
 	Clear_Lock
 }
 
-Menu_EditExcludeList(){
+Menu_EditExcludeList()
+{
 	ScriptHeader
 	texteditor=""
 	exitmenu="false"
@@ -2134,7 +2369,8 @@ EOF
 }
 ### ###
 
-if [ -z "$1" ]; then
+if [ $# -eq 0 ] || [ -z "$1" ]
+then
 	NTP_Ready
 	Entware_Ready
 	Create_Dirs
@@ -2154,6 +2390,9 @@ if [ -z "$1" ]; then
 	exit 0
 fi
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Sep-22] ##
+##----------------------------------------##
 case "$1" in
 	install)
 		Check_Lock
@@ -2200,7 +2439,8 @@ case "$1" in
 		exit 0
 	;;
 	dnsmasq)
-		if grep -q 'log-facility' /etc/dnsmasq.conf; then
+		if grep -q '^log-facility=/.*' /etc/dnsmasq.conf
+		then
 			Print_Output true "dnsmasq has restarted, restarting taildns" "$PASS"
 			/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 			sleep 3
@@ -2278,7 +2518,13 @@ case "$1" in
 		exit 0
 	;;
 	develop)
-		SCRIPT_BRANCH="develop"
+		if false  ## The "develop" branch is NOT supported on this repository ##
+		then
+		    SCRIPT_BRANCH="develop"
+		else
+		    SCRIPT_BRANCH="master"
+		    printf "\n${REDct}The 'develop' branch is NOT available. Updating from the 'master' branch...${CLEARct}\n"
+		fi
 		SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 		Update_Version force
 		exit 0

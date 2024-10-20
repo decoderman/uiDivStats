@@ -1,15 +1,12 @@
 # uiDivStats - WebUI for Diversion statistics
 
-## v4.0.1
-
-### Updated on July 01, 2024 by @decoderman
+## v4.0.2
+### Updated on 2024-Oct-13 by @decoderman with updates from @Martinski4GitHub
 
 ## About
-
 A graphical representation of domain blocking performed by Diversion.
 
 uiDivStats is free to use under the [GNU General Public License version 3](https://opensource.org/licenses/GPL-3.0) (GPL 3.0).
-
 
 ## Supported firmware versions
 
