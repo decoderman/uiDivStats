@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Oct-13
+# Last Modified: 2024-Oct-26
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -28,7 +28,7 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.2"
+readonly SCRIPT_VERSION="v4.0.3"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -46,12 +46,15 @@ SQLITE3_PATH="/opt/bin/sqlite3"
 readonly DIVERSION_DIR="/opt/share/diversion"
 readonly STATSEXCLUDE_LIST_FILE="$SCRIPT_DIR/statsexcludelist"
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Oct-13] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
 # For daily CRON job to trim database #
 readonly defTrimDB_Hour=0
 readonly defTrimDB_Mins=1
+readonly trimLOGFilePath="${SCRIPT_USB_DIR}/uiDivStats_Trim.LOG"
+readonly trimTMPOldsFile="${SCRIPT_USB_DIR}/uiDivStats_Olds.TMP"
+readonly trimLogDateForm="%Y-%m-%d %H:%M:%S"
 
 ### End of script variables ###
 
@@ -78,7 +81,7 @@ Print_Output(){
 	if [ "$1" = "true" ]; then
 		logger -t "$SCRIPT_NAME" "$2"
 	fi
-	printf "${BOLD}${3}%s${CLEARFORMAT}\\n\\n" "$2"
+	printf "${BOLD}${3}%s${CLEARFORMAT}\n\n" "$2"
 }
 
 Validate_Number(){
@@ -112,18 +115,22 @@ Firmware_Version_Check(){
 }
 
 ### Code for these functions inspired by https://github.com/Adamm00 - credit to @Adamm ###
-Check_Lock(){
-	if [ -f "/tmp/$SCRIPT_NAME.lock" ]; then
-		ageoflock=$(($(date +%s) - $(date +%s -r /tmp/$SCRIPT_NAME.lock)))
-		if [ "$ageoflock" -gt 600 ]; then
+Check_Lock()
+{
+	if [ -f "/tmp/$SCRIPT_NAME.lock" ]
+	then
+		ageoflock="$(($(date +%s) - $(date +%s -r "/tmp/$SCRIPT_NAME.lock")))"
+		if [ "$ageoflock" -gt 600 ]  #10 minutes#
+		then
 			Print_Output true "Stale lock file found (>600 seconds old) - purging lock" "$ERR"
-			kill "$(sed -n '1p' /tmp/$SCRIPT_NAME.lock)" >/dev/null 2>&1
+			kill "$(sed -n '1p' "/tmp/$SCRIPT_NAME.lock")" >/dev/null 2>&1
 			Clear_Lock
 			echo "$$" > "/tmp/$SCRIPT_NAME.lock"
 			return 0
 		else
 			Print_Output true "Lock file found (age: $ageoflock seconds) - statistic generation likely currently in progress" "$ERR"
-			if [ -z "$1" ]; then
+			if [ $# -eq 0 ] || [ -z "$1" ]
+			then
 				exit 1
 			else
 				if [ "$1" = "webui" ]; then
@@ -350,7 +357,7 @@ Conf_FromSettings(){
 	if [ -f "$SETTINGSFILE" ]; then
 		if [ "$(grep "uidivstats_" $SETTINGSFILE | grep -v "version" -c)" -gt 0 ]; then
 			Print_Output true "Updated settings from WebUI found, merging into $SCRIPT_CONF" "$PASS"
-			cp -a "$SCRIPT_CONF" "$SCRIPT_CONF.bak"
+			cp -a "$SCRIPT_CONF" "${SCRIPT_CONF}.bak"
 			grep "uidivstats_" "$SETTINGSFILE" | grep -v "version" > "$TMPFILE"
 			sed -i "s/uidivstats_//g;s/ /=/g" "$TMPFILE"
 			while IFS='' read -r line || [ -n "$line" ]; do
@@ -366,10 +373,10 @@ Conf_FromSettings(){
 			done < "$TMPFILE"
 			grep 'uidivstats_version' "$SETTINGSFILE" > "$TMPFILE"
 			sed -i "\\~uidivstats_~d" "$SETTINGSFILE"
-			mv "$SETTINGSFILE" "$SETTINGSFILE.bak"
-			cat "$SETTINGSFILE.bak" "$TMPFILE" > "$SETTINGSFILE"
+			mv "$SETTINGSFILE" "${SETTINGSFILE}.bak"
+			cat "${SETTINGSFILE}.bak" "$TMPFILE" > "$SETTINGSFILE"
 			rm -f "$TMPFILE"
-			rm -f "$SETTINGSFILE.bak"
+			rm -f "${SETTINGSFILE}.bak"
 
 			QueryMode "$(QueryMode check)"
 			sleep 3
@@ -551,32 +558,43 @@ Auto_Startup(){
 
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-13] ##
+## Modified by Martinski W. [2024-Oct-26] ##
 ##----------------------------------------##
 Auto_Cron()
 {
 	case $1 in
 		create)
-			STARTUPLINECOUNTGENERATE=$(cru l | grep -c "${SCRIPT_NAME}_generate")
-			STARTUPLINECOUNTTRIM=$(cru l | grep -c "${SCRIPT_NAME}_trim")
-			STARTUPLINECOUNTQUERYLOG=$(cru l | grep -c "${SCRIPT_NAME}_querylog")
-			STARTUPLINECOUNTFLUSHTODB=$(cru l | grep -c "${SCRIPT_NAME}_flushtodb")
+			STARTUPLINECOUNTGENERATE="$(cru l | grep -c "${SCRIPT_NAME}_generate")"
+			STARTUPLINECOUNTTRIM="$(cru l | grep -c "${SCRIPT_NAME}_trim")"
+			STARTUPLINECOUNTQUERYLOG="$(cru l | grep -c "${SCRIPT_NAME}_querylog")"
+			STARTUPLINECOUNTFLUSHTODB="$(cru l | grep -c "${SCRIPT_NAME}_flushtodb")"
 
-			STARTUPLINECOUNTEXGENERATE=$(cru l | grep "${SCRIPT_NAME}_generate" | grep -c "1-23" )
-			if [ "$STARTUPLINECOUNTGENERATE" -ne 0 ] && [ "$STARTUPLINECOUNTEXGENERATE" -eq 0 ]; then
+			STARTUPLINECOUNTEXGENERATE="$(cru l | grep "${SCRIPT_NAME}_generate" | grep -c ' 1-23 ')"
+			if [ "$STARTUPLINECOUNTGENERATE" -ne 0 ] && [ "$STARTUPLINECOUNTEXGENERATE" -eq 0 ]
+			then
 				cru d "${SCRIPT_NAME}_generate"
+				STARTUPLINECOUNTGENERATE="$(cru l | grep -c "${SCRIPT_NAME}_generate")"
 			fi
 
-			STARTUPLINECOUNTEXTRIM=$(cru l | grep "${SCRIPT_NAME}_trim" | grep -c "^$(_TrimDatabaseTime_ mins)" )
+			STARTUPLINECOUNTEXTRIM="$(cru l | grep "${SCRIPT_NAME}_trim" | grep -c "^$(_TrimDatabaseTime_ mins) ")"
 			if [ "$STARTUPLINECOUNTTRIM" -ne 0 ] && [ "$STARTUPLINECOUNTEXTRIM" -eq 0 ]
 			then
 				cru d "${SCRIPT_NAME}_trim"
-				STARTUPLINECOUNTTRIM=$(cru l | grep -c "${SCRIPT_NAME}_trim")
+				STARTUPLINECOUNTTRIM="$(cru l | grep -c "${SCRIPT_NAME}_trim")"
 			fi
 
-			STARTUPLINECOUNTEXFLUSHTODB=$(cru l | grep "${SCRIPT_NAME}_flushtodb" | grep -c "4-59/5" )
-			if [ "$STARTUPLINECOUNTFLUSHTODB" -ne 0 ] && [ "$STARTUPLINECOUNTEXFLUSHTODB" -eq 0 ]; then
+			STARTUPLINECOUNTEXQUERYLOG="$(cru l | grep "${SCRIPT_NAME}_querylog" | grep -c '^[*]/3 ')"
+			if [ "$STARTUPLINECOUNTQUERYLOG" -ne 0 ] && [ "$STARTUPLINECOUNTEXQUERYLOG" -eq 0 ]
+			then
+				cru d "${SCRIPT_NAME}_querylog"
+				STARTUPLINECOUNTQUERYLOG="$(cru l | grep -c "${SCRIPT_NAME}_querylog")"
+			fi
+
+			STARTUPLINECOUNTEXFLUSHTODB="$(cru l | grep "${SCRIPT_NAME}_flushtodb" | grep -c '^4-59/5 ')"
+			if [ "$STARTUPLINECOUNTFLUSHTODB" -ne 0 ] && [ "$STARTUPLINECOUNTEXFLUSHTODB" -eq 0 ]
+			then
 				cru d "${SCRIPT_NAME}_flushtodb"
+				STARTUPLINECOUNTFLUSHTODB="$(cru l | grep -c "${SCRIPT_NAME}_flushtodb")"
 			fi
 
 			if [ "$STARTUPLINECOUNTGENERATE" -eq 0 ]; then
@@ -586,7 +604,7 @@ Auto_Cron()
 				cru a "${SCRIPT_NAME}_trim" "$(_TrimDatabaseTime_ mins) $(_TrimDatabaseTime_ hour) * * * /jffs/scripts/$SCRIPT_NAME trimdb"
 			fi
 			if [ "$STARTUPLINECOUNTQUERYLOG" -eq 0 ]; then
-				cru a "${SCRIPT_NAME}_querylog" "* * * * * /jffs/scripts/$SCRIPT_NAME querylog"
+				cru a "${SCRIPT_NAME}_querylog" "*/3 * * * * /jffs/scripts/$SCRIPT_NAME querylog"
 			fi
 			if [ "$STARTUPLINECOUNTFLUSHTODB" -eq 0 ]; then
 				cru a "${SCRIPT_NAME}_flushtodb" "4-59/5 * * * * /jffs/scripts/$SCRIPT_NAME flushtodb"
@@ -907,9 +925,14 @@ _ValidateCronJobMins_()
     then return 0 ; else return 1 ; fi
 }
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Oct-13] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+#----------------------------------------------------------
+# NOTE: The cron job minutes should *NOT* be modified
+# because it must be scheduled to avoid conflicts with
+# other cron jobs that generate/access database records.
+#----------------------------------------------------------
 _TrimDatabaseTime_()
 {
    case "$1" in
@@ -919,7 +942,7 @@ _TrimDatabaseTime_()
            trimDBtime12hr="$(_TrimDatabaseTime_ time12hr)"
            trimDBtime24hr="$(_TrimDatabaseTime_ time24hr)"
            getTrimDBhour=true ; exitTrimDBhour=false
-           getTrimDBmins=true ; exitTrimDBmins=false
+           getTrimDBmins=false ; exitTrimDBmins=false
            while true
            do
                ScriptHeader
@@ -999,6 +1022,11 @@ _TrimDatabaseTime_()
            ;;
        mins)
            TRIMDB_MINS="$(grep "^TRIMDB_MINS=" "$SCRIPT_CONF" | cut -f2 -d"=")"
+           if [ "$TRIMDB_MINS" -ne "$defTrimDB_Mins" ]
+           then  # Reset to default value #
+               TRIMDB_MINS="$defTrimDB_Mins"
+               sed -i 's/^TRIMDB_MINS.*$/TRIMDB_MINS='"$TRIMDB_MINS"'/' "$SCRIPT_CONF"
+           fi
            echo "${TRIMDB_MINS:=$defTrimDB_Mins}"
            ;;
        time24hr)
@@ -1051,42 +1079,82 @@ WritePlainData_ToJS(){
 	done
 }
 
-Table_Indexes(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Table_Indexes()
+{
 	case "$1" in
 		create)
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_clients ON dnsqueries (SrcIP);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_clients ON dnsqueries (SrcIP);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_time_clients ON dnsqueries (Timestamp,SrcIP);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_time_clients ON dnsqueries (Timestamp,SrcIP);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_allowed_time_clients ON dnsqueries (Allowed,Timestamp,SrcIP);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_allowed_time_clients ON dnsqueries (Allowed,Timestamp,SrcIP);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_clients_time_domains ON dnsqueries (SrcIP,Timestamp,ReqDmn);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_clients_time_domains ON dnsqueries (SrcIP,Timestamp,ReqDmn);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_clients_allowed_time_domains ON dnsqueries (SrcIP,Allowed,Timestamp,ReqDmn);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_clients_allowed_time_domains ON dnsqueries (SrcIP,Allowed,Timestamp,ReqDmn);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_time_domains ON dnsqueries (Timestamp,ReqDmn);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_time_domains ON dnsqueries (Timestamp,ReqDmn);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_allowed_time_domains ON dnsqueries (Allowed,Timestamp,ReqDmn);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_allowed_time_domains ON dnsqueries (Allowed,Timestamp,ReqDmn);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_allowed_time ON dnsqueries (Allowed,Timestamp);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_allowed_time ON dnsqueries (Allowed,Timestamp);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
-			echo "PRAGMA cache_size=-20000; CREATE INDEX IF NOT EXISTS idx_time_allowed ON dnsqueries (Timestamp,Allowed);" > /tmp/uidivstats-upgrade.sql
+			{
+			  echo "PRAGMA temp_store=1;"
+			  echo "PRAGMA cache_size=-20000;"
+			  echo "CREATE INDEX IF NOT EXISTS idx_time_allowed ON dnsqueries (Timestamp,Allowed);"
+			} > /tmp/uidivstats-upgrade.sql
 			while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
 				sleep 1
 			done
@@ -1097,15 +1165,19 @@ Table_Indexes(){
 	esac
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
 # $1 create/drop $2 tablename $3 frequency (hours) $4 outputfrequency
-TempTime_Table(){
+TempTime_Table()
+{
 	case "$1" in
 		create)
 			multiplier="$(echo "$3" | awk '{printf (60*60*$1)}')"
-
 			{
 				echo ".headers off"
 				echo ".output /tmp/timesmin"
+				echo "PRAGMA temp_store=1;"
 				echo "SELECT CAST(MIN([Timestamp])/$multiplier AS INT)*$multiplier FROM ${2}${4};"
 				echo ".headers off"
 				echo ".output /tmp/timesmax"
@@ -1124,6 +1196,7 @@ TempTime_Table(){
 			if ! Validate_Number "$timesmax"; then timesmax=0; fi
 
 			{
+				echo "PRAGMA temp_store=1;"
 				echo "CREATE TABLE IF NOT EXISTS temp_timerange_$4 AS"
 				echo "WITH RECURSIVE c(x) AS("
 				echo "VALUES($timesmin)"
@@ -1146,21 +1219,38 @@ TempTime_Table(){
 	esac
 }
 
-Write_View_Sql_ToFile(){
-	if [ "$1" = "create" ]; then
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Write_View_Sql_ToFile()
+{
+	if [ "$1" = "create" ]
+	then
 		timenow="$6"
-		echo "CREATE VIEW IF NOT EXISTS ${2}${3} AS SELECT * FROM $2 WHERE ([Timestamp] >= strftime('%s',datetime($timenow,'unixepoch','-$4 day'))) AND ([Timestamp] <= $timenow);" > "$5"
-	elif [ "$1" = "drop" ]; then
-		echo "DROP VIEW IF EXISTS ${2}${3};" > "$4"
+		{
+		  echo "PRAGMA temp_store=1;"
+		  echo "CREATE VIEW IF NOT EXISTS ${2}${3} AS SELECT * FROM $2 WHERE ([Timestamp] >= strftime('%s',datetime($timenow,'unixepoch','-$4 day'))) AND ([Timestamp] <= $timenow);"
+		} > "$5"
+	elif [ "$1" = "drop" ]
+	then
+		{
+		  echo "PRAGMA temp_store=1;"
+		  echo "DROP VIEW IF EXISTS ${2}${3};"
+		} > "$4"
 	fi
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
 #$1 fieldname $2 tablename $3 length (days) $4 outputfile $5 outputfrequency $6 sqlfile
-Write_Count_Sql_ToFile(){
+Write_Count_Sql_ToFile()
+{
 	{
 		echo ".mode csv"
 		echo ".headers on"
 		echo ".output ${4}${5}.htm"
+		echo "PRAGMA temp_store=1;"
 	} > "$6"
 
 	wherestring=""
@@ -1182,12 +1272,17 @@ Write_Count_Sql_ToFile(){
 	fi
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
 #$1 fieldname $2 tablename $3 length (days) $4 outputfile $5 outputfrequency $6 sqlfile
-Write_Count_PerClient_Sql_ToFile(){
+Write_Count_PerClient_Sql_ToFile()
+{
 	{
 		echo ".mode csv"
 		echo ".headers off"
 		echo ".output ${4}${5}clients.htm"
+		echo "PRAGMA temp_store=1;"
 	} > "$6"
 
 	wherestring=""
@@ -1215,14 +1310,19 @@ Write_Count_PerClient_Sql_ToFile(){
 	fi
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
 #$1 fieldname $2 tablename $3 frequency (hours) $4 length (days) $5 outputfile $6 outputfrequency $7 sqlfile
-Write_Time_Sql_ToFile(){
+Write_Time_Sql_ToFile()
+{
 	multiplier="$(echo "$3" | awk '{printf (60*60*$1)}')"
 
 	{
 		echo ".mode csv"
 		echo ".headers off"
 		echo ".output ${5}${6}time.htm"
+		echo "PRAGMA temp_store=1;"
 	} > "$7"
 
 	if [ "$1" = "Total" ]; then
@@ -1232,10 +1332,15 @@ Write_Time_Sql_ToFile(){
 	fi
 }
 
-Write_KeyStats_Sql_ToFile(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Write_KeyStats_Sql_ToFile()
+{
 	{
 		echo ".headers off"
 		echo ".output /tmp/queries${1}${3}"
+		echo "PRAGMA temp_store=1;"
 	} > "$4"
 
 	if [ "$1" = "Total" ]; then
@@ -1245,41 +1350,44 @@ Write_KeyStats_Sql_ToFile(){
 	fi
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
 Generate_NG()
 {
-	TZ=$(cat /etc/TZ)
+	TZ="$(cat /etc/TZ)"
 	export TZ
 
-	timenow=$(date +"%s")
-	timenowfriendly=$(date +"%c")
+	timenow="$(date +'%s')"
+	timenowfriendly="$(date +'%c')"
 
 	rm -f /tmp/uidivstats.sql
-
 	{
-		echo "PRAGMA cache_size=-20000; BEGIN TRANSACTION;"
+		echo "PRAGMA temp_store=1;"
+		echo "PRAGMA cache_size=-20000;"
+		echo "BEGIN TRANSACTION;"
 		echo "DELETE FROM [dnsqueries] WHERE [Timestamp] > $timenow;"
 		echo "DELETE FROM [dnsqueries] WHERE [SrcIP] = 'from';"
 		echo "END TRANSACTION;"
 	} > /tmp/uidivstats-trim.sql
-	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >/dev/null 2>&1; do
-		sleep 1
-	done
+
+	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >/dev/null 2>&1
+	do sleep 1 ; done
 	rm -f /tmp/uidivstats-trim.sql
 
 	if [ $# -gt 0 ] && [ -n "$1" ] && [ "$1" = "fullrefresh" ]
 	then
 		Write_View_Sql_ToFile drop dnsqueries daily /tmp/uidivstats.sql
-		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
-			sleep 1
-		done
+		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1
+		do sleep 1 ; done
+
 		Write_View_Sql_ToFile drop dnsqueries weekly /tmp/uidivstats.sql
-		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
-			sleep 1
-		done
+		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1
+		do sleep 1 ; done
+
 		Write_View_Sql_ToFile drop dnsqueries monthly /tmp/uidivstats.sql
-		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
-			sleep 1
-		done
+		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1
+		do sleep 1 ; done
 		rm -f /tmp/uidivstats.sql
 	fi
 
@@ -1329,7 +1437,11 @@ Generate_NG()
 	rm -f /tmpuidivstatstitle.txt
 }
 
-Generate_Query_Log(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Generate_Query_Log()
+{
 	if [ -n "$PPID" ]; then
 		ps | grep -v grep | grep -v $$ | grep -v "$PPID" | grep -i "$SCRIPT_NAME" | grep querylog | awk '{print $1}' | xargs kill -9 >/dev/null 2>&1
 	else
@@ -1337,8 +1449,10 @@ Generate_Query_Log(){
 	fi
 
 	recordcount="$(LastXQueries check)"
-	if [ "$(CacheMode check)" = "tmp" ]; then
-		if [ -f /tmp/cache-uiDivStats-SQL.tmp ]; then
+	if [ "$(CacheMode check)" = "tmp" ]
+	then
+		if [ -f /tmp/cache-uiDivStats-SQL.tmp ]
+		then
 			tail -n "$recordcount" /tmp/cache-uiDivStats-SQL.tmp | sort -s -k 1,1 -n -r | sed 's/,/|/g' | awk 'BEGIN{FS=OFS="|"} {t=$2; $2=$3; $3=t; print}' > /tmp/cache-uiDivStats-SQL.tmp.ordered
 			recordcount="$((recordcount - $(wc -l < /tmp/cache-uiDivStats-SQL.tmp.ordered)))"
 			if [ "$(echo "$recordcount 0" | awk '{print ($1 < $2)}')" -eq 1 ]; then
@@ -1347,12 +1461,14 @@ Generate_Query_Log(){
 		fi
 	fi
 
-	if [ "$recordcount" -gt 0 ]; then
+	if [ "$recordcount" -gt 0 ]
+	then
 		{
 			echo ".mode csv"
 			echo ".headers off"
 			echo ".separator '|'"
 			echo ".output $CSV_OUTPUT_DIR/SQLQueryLog.tmp"
+			echo "PRAGMA temp_store=1;"
 			echo "SELECT [Timestamp] Time,[ReqDmn] ReqDmn,[SrcIP] SrcIP,[QryType] QryType,[Allowed] Allowed FROM [dnsqueries] ORDER BY [Timestamp] DESC LIMIT $recordcount;"
 		} > /tmp/uidivstats-query.sql
 		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-query.sql >/dev/null 2>&1; do
@@ -1461,13 +1577,17 @@ Generate_Count_Blocklist_Domains(){
 	WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "BlockedDomains,$blocklistdomains"
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
 Generate_Stats_From_SQLite()
 {
 	timenow="$1"
 
 	metriclist="Total Blocked"
 
-	for metric in $metriclist; do
+	for metric in $metriclist
+	do
 		#daily
 		Write_Time_Sql_ToFile "$metric" dnsqueries 0.25 1 "$CSV_OUTPUT_DIR/$metric" daily /tmp/uidivstats.sql
 		while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats.sql >/dev/null 2>&1; do
@@ -1541,6 +1661,7 @@ Generate_Stats_From_SQLite()
 	{
 		echo ".mode list"
 		echo ".output /tmp/ipdistinctclients"
+		echo "PRAGMA temp_store=1;"
 		echo "SELECT DISTINCT [SrcIP] SrcIP FROM dnsqueries;"
 	} > /tmp/ipdistinctclients.sql
 	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/ipdistinctclients.sql >/dev/null 2>&1; do
@@ -1558,7 +1679,8 @@ Generate_Stats_From_SQLite()
 
 	echo "var hostiparray =[" > "$CSV_OUTPUT_DIR/ipdistinctclients.js"
 	ARPDUMP="$(arp -an)"
-	for ipclient in $ipclients; do
+	for ipclient in $ipclients
+	do
 		ARPINFO="$(echo "$ARPDUMP" | grep "$ipclient)")"
 		MACADDR="$(echo "$ARPINFO" | awk '{print $4}' | cut -f1 -d ".")"
 
@@ -1591,66 +1713,200 @@ Generate_Stats_From_SQLite()
 	echo "];" >> "$CSV_OUTPUT_DIR/ipdistinctclients.js"
 }
 
-Optimise_DNS_DB(){
+##-------------------------------------##
+## Added by Martinski W. [2024-Oct-26] ##
+##-------------------------------------##
+_ShowDatabaseFileInfo_()
+{
+   [ ! -s "$1" ] && return 1
+   local fileSize  fileInfo
+   fileSize="$(ls -1lh "$1" | awk -F ' ' '{print $3}')"
+   fileInfo="$(ls -1l "$1" | awk -F ' ' '{print $3,$4,$5,$6,$7}')"
+   printf "[%sB] %s\n" "$fileSize" "$fileInfo"
+}
+
+_GetTrimLogTimeStamp_() { printf "[$(date +"$trimLogDateForm")]" ; }
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Oct-26] ##
+##-------------------------------------##
+_LogOldestRecords_()
+{
+   local recordsLimit  showTotalOnly
+   recordsLimit=-1
+   showTotalOnly=true
+   oldestRecsFound=false
+   ##TBD for TESTING## _ShowOldestRecords_ OK
+   [ -s "$trimTMPOldsFile" ] && cat "$trimTMPOldsFile" >> "$trimLOGFilePath"
+   rm -f "$trimTMPOldsFile"
+}
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Oct-26] ##
+##-------------------------------------##
+_ApplyDatabaseSQLCmds_()
+{
+    foundError=false
+    foundLocked=false
+    triesCount=0 ; maxTriesCount=10
+    errorCount=0 ; maxErrorCount=3
+
+    while [ "$((triesCount++))" -lt "$maxTriesCount" ] && [ "$errorCount" -lt "$maxErrorCount" ]
+    do
+        if "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >> "$trimLOGFilePath" 2>&1
+        then foundError=false ; foundLocked=false ; break ; fi
+        errorCheck="$(tail -n1 "$trimLOGFilePath")"
+        echo "-----------------------------------" >> "$trimLOGFilePath"
+        printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$trimLOGFilePath"
+        if echo "$errorCheck" | grep -qE "^(Error:|Parse error|Runtime error)"
+        then
+            echo "$errorCheck"
+            if echo "$errorCheck" | grep -qE "^Runtime error .*: database is locked"
+            then foundLocked=true ; continue ; fi
+            errorCount="$((errorCount + 1))" ; foundError=true ; foundLocked=false
+        fi
+        [ "$triesCount" -ge "$maxTriesCount" ] && break
+        [ "$errorCount" -ge "$maxErrorCount" ] && break
+        sleep 1
+    done
+
+    if "$foundError"
+    then resultStr="reported error(s)."
+    elif "$foundLocked"
+    then resultStr="found locked database."
+    else
+        resultStr="completed successfully."
+        [ "$triesCount" -gt 1 ] && \
+        printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$trimLOGFilePath"
+    fi
+}
+
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Optimise_DNS_DB()
+{
 	renice 15 $$
-	Print_Output true "Running nightly database analysis and optimisation..." "$PASS"
+
+	local errorCount  maxErrorCount  foundError
+	local triesCount  maxTriesCount  foundLocked  resultStr
+
+	printf "$(_GetTrimLogTimeStamp_) BEGIN [${SCRIPT_VERSION}]\n" | tee -a "$trimLOGFilePath"
+	printf "Running database analysis and optimization...\n" | tee -a "$trimLOGFilePath"
+	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
+
+	Print_Output true "Running nightly database analysis and optimization..." "$PASS"
 	{
+		echo "PRAGMA temp_store=1;"
 		echo "PRAGMA analysis_limit=0;"
 		echo "PRAGMA cache_size=-20000;"
 		echo "ANALYZE dnsqueries;"
+		echo "VACUUM;"
 	}  > /tmp/uidivstats-trim.sql
-	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >/dev/null 2>&1; do
-		sleep 1
-	done
+
+	_ApplyDatabaseSQLCmds_
+	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
+	printf "Database analysis and optimization process ${resultStr}\n" | tee -a "$trimLOGFilePath"
+	printf "$(_GetTrimLogTimeStamp_) END.\n" | tee -a "$trimLOGFilePath"
+
 	rm -f /tmp/uidivstats-trim.sql
-	Print_Output true "Database analysis and optimisation complete" "$PASS"
+	Print_Output true "Database analysis and optimization completed." "$PASS"
+
 	renice 0 $$
 }
 
-Trim_DNS_DB(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Trim_DNS_DB()
+{
+	Check_Lock
 	renice 15 $$
-	TZ=$(cat /etc/TZ)
+	TZ="$(cat /etc/TZ)"
 	export TZ
-	timenow=$(date +"%s")
+	timeNow="$(date +'%s')"
+
+	local errorCount  maxErrorCount  foundError
+	local triesCount  maxTriesCount  foundLocked  resultStr
+	local trimErrorsFound  trimNumLocked  oldestRecsFound
+
+	if [ -s "$trimLOGFilePath" ]
+	then
+	    cp -fp "$trimLOGFilePath" "${trimLOGFilePath}.BAK"
+	    rm -f "$trimLOGFilePath"
+	fi
+	touch "$trimLOGFilePath"
+	trimNumLocked=0
+	trimErrorsFound=false
+
+	printf "$(_GetTrimLogTimeStamp_) BEGIN [${SCRIPT_VERSION}]\n" | tee -a "$trimLOGFilePath"
+	printf "Trimming database records older than [$(DaysToKeep check)] days...\n" | tee -a "$trimLOGFilePath"
+	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
+	##TBD for TESTING## _LogOldestRecords_ 
 
 	Print_Output true "Trimming records entries from database..." "$PASS"
-
 	{
-		echo "PRAGMA cache_size=-20000; BEGIN TRANSACTION;"
-		echo "DELETE FROM [dnsqueries] WHERE ([Timestamp] < strftime('%s',datetime($timenow,'unixepoch','-$(DaysToKeep check) day')));"
-		echo "DELETE FROM [dnsqueries] WHERE [Timestamp] > $timenow;"
+		echo "PRAGMA temp_store=1;"
+		echo "PRAGMA cache_size=-20000;"
+		echo "BEGIN TRANSACTION;"
+		echo "DELETE FROM [dnsqueries] WHERE [Timestamp] < strftime('%s',datetime($timeNow,'unixepoch','-$(DaysToKeep check) day'));"
+		echo "DELETE FROM [dnsqueries] WHERE [Timestamp] > $timeNow;"
 		echo "DELETE FROM [dnsqueries] WHERE [SrcIP] = 'from';"
 		echo "END TRANSACTION;"
 	} > /tmp/uidivstats-trim.sql
-	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >/dev/null 2>&1; do
-		sleep 1
-	done
+
+	_ApplyDatabaseSQLCmds_
+	"$foundError" && trimErrorsFound=true
+	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
+	printf "$(_GetTrimLogTimeStamp_) Database record trimming process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 
 	Write_View_Sql_ToFile drop dnsqueries weekly /tmp/uidivstats-trim.sql
-	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >/dev/null 2>&1; do
-		sleep 1
-	done
-	Write_View_Sql_ToFile drop dnsqueries monthly /tmp/uidivstats-trim.sql
-	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >/dev/null 2>&1; do
-		sleep 1
-	done
-	rm -f /tmp/uidivstats-trim.sql
+	_ApplyDatabaseSQLCmds_
+	"$foundError" && trimErrorsFound=true
+	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
+	printf "$(_GetTrimLogTimeStamp_) Database weekly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 
-	Print_Output true "Record trimming complete" "$PASS"
+	Write_View_Sql_ToFile drop dnsqueries monthly /tmp/uidivstats-trim.sql
+	_ApplyDatabaseSQLCmds_
+	"$foundError" && trimErrorsFound=true
+	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
+	printf "$(_GetTrimLogTimeStamp_) Database monthly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
+
+	rm -f /tmp/uidivstats-trim.sql
+	Print_Output true "Database record trimming completed." "$PASS"
+
+	if "$trimErrorsFound"
+	then resultStr="reported error(s)."
+	elif [ "$trimNumLocked" -gt 2 ]
+	then resultStr="found locked database."
+	else resultStr="completed successfully."
+	fi
+	##TBD for TESTING## "$oldestRecsFound" && _LogOldestRecords_
+	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
+	printf "Database trimming process ${resultStr}\n" | tee -a "$trimLOGFilePath"
+	printf "$(_GetTrimLogTimeStamp_) END.\n\n" | tee -a "$trimLOGFilePath"
 
 	renice 0 $$
+	Clear_Lock
 }
 
-Flush_Cache_To_DB(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Flush_Cache_To_DB()
+{
 	if [ -n "$PPID" ]; then
 		ps | grep -v grep | grep -v $$ | grep -v "$PPID" | grep -i "$SCRIPT_NAME" | grep flushtodb | awk '{print $1}' | xargs kill -9 >/dev/null 2>&1
 	else
 		ps | grep -v grep | grep -v $$ | grep -i "$SCRIPT_NAME" | grep flushtodb | awk '{print $1}' | xargs kill -9 >/dev/null 2>&1
 	fi
 	renice 15 $$
-	if [ -f /tmp/cache-uiDivStats-SQL.tmp ]; then
+	if [ -f /tmp/cache-uiDivStats-SQL.tmp ]
+	then
 		{
-			echo "PRAGMA synchronous = normal; PRAGMA cache_size=-20000;"
+			echo "PRAGMA temp_store=1;"
+			echo "PRAGMA synchronous = normal;"
+			echo "PRAGMA cache_size=-20000;"
 			echo "BEGIN TRANSACTION;"
 			echo "CREATE TABLE IF NOT EXISTS [dnsqueries] ([QueryID] INTEGER PRIMARY KEY NOT NULL,[Timestamp] NUMERIC NOT NULL,[SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL);"
 			echo "CREATE TABLE IF NOT EXISTS [dnsqueries_tmp] ([Timestamp] NUMERIC NOT NULL,[SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL);"
@@ -1669,18 +1925,23 @@ Flush_Cache_To_DB(){
 	renice 0 $$
 }
 
-Reset_DB(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Reset_DB()
+{
 	/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 	sleep 3
 	Auto_Cron delete 2>/dev/null
 
-	if ! mv "$DNS_DB" "$DNS_DB$1"; then
+	if ! mv "$DNS_DB" "${DNS_DB}$1"; then
 		Print_Output true "Database backup failed, please check storage device" "$WARN"
 	fi
 
 	Print_Output false "Creating database table and enabling write-ahead logging..." "$PASS"
 	{
 		echo "PRAGMA journal_mode=WAL;"
+		echo "PRAGMA temp_store=1;"
 		echo "CREATE TABLE IF NOT EXISTS [dnsqueries] ([QueryID] INTEGER PRIMARY KEY NOT NULL,[Timestamp] NUMERIC NOT NULL,[SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL);"
 	}  > /tmp/uidivstats-upgrade.sql
 	"$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql
@@ -1699,7 +1960,8 @@ Reset_DB(){
 	Print_Output true "Database reset complete" "$WARN"
 }
 
-Process_Upgrade(){
+Process_Upgrade()
+{
 	if [ -f "$SCRIPT_DIR/.upgraded" ] || [ -f "$SCRIPT_DIR/.upgraded2" ] || [ -f "$SCRIPT_DIR/.upgraded3" ]; then
 		Print_Output true "Unable to upgrade from older versions than 3.0.0" "$CRIT"
 		exit 1
@@ -1710,19 +1972,21 @@ Process_Upgrade(){
 	if echo "SELECT [Result] FROM [dnsqueries] LIMIT 0" | "$SQLITE3_PATH" "$DNS_DB" >/dev/null 2>&1; then
 		Print_Output true "Upgrade database schema." "$WARN"
 		Print_Output false "Existing data will be migrated overnight, or you can run 'uiDivStats trimdb' manually." "$WARN"
-		Reset_DB .old
+		Reset_DB ".old"
 	fi
 }
 
-Migrate_Old_Data(){
-	if [ -f "$DNS_DB.old" ]; then
+Migrate_Old_Data()
+{
+	if [ -f "${DNS_DB}.old" ]
+	then
 		Print_Output true "Migrating old data. This can take a while!" "$PASS"
 		Auto_Cron delete 2>/dev/null
 		renice 15 $$
 
-		TZ=$(cat /etc/TZ)
+		TZ="$(cat /etc/TZ)"
 		export TZ
-		timenow=$(date +"%s")
+		timenow="$(date +'%s')"
 
 		{
 			echo "ATTACH DATABASE '$DNS_DB.old' AS OLD;"
@@ -1733,7 +1997,7 @@ Migrate_Old_Data(){
 		done
 		rm -f /tmp/uidivstats-upgrade.sql
 
-		rm -f "$DNS_DB.old"
+		rm -f "${DNS_DB}.old"
 
 		Print_Output true "Data migration complete" "$PASS"
 		Auto_Cron create 2>/dev/null
@@ -1802,7 +2066,7 @@ MainMenu()
 	printf "3.    Edit list of domains to exclude from %s statistics\\n\\n" "$SCRIPT_NAME"
 	printf "4.    Set number of recent DNS queries to show in WebUI\\n      Currently: ${SETTING}%s queries will be shown${CLEARFORMAT}\\n\\n" "$(LastXQueries check)"
 	printf "5.    Set number of days data to keep in database\\n      Currently: ${SETTING}%s days data will be kept${CLEARFORMAT}\\n\\n" "$(DaysToKeep check)"
-	printf "6.    Set time for daily cron job to trim the database\\n      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
+	printf "6.    Set the hour for daily cron job to trim the database\\n      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
 	printf "q.    Toggle query mode\\n      Currently ${SETTING}%s${CLEARFORMAT} query types will be logged\\n\\n" "$(QueryMode check)"
 	printf "c.    Toggle cache mode\\n      Currently ${SETTING}%s${CLEARFORMAT} being used to cache query records\\n\\n" "$(CacheMode check)"
 	printf "u.    Check for updates\\n"
@@ -1991,7 +2255,11 @@ Check_Requirements(){
 	fi
 }
 
-Menu_Install(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-26] ##
+##----------------------------------------##
+Menu_Install()
+{
 	ScriptHeader
 	Print_Output true "Welcome to $SCRIPT_NAME $SCRIPT_VERSION, a script by JackYaz"
 	sleep 1
@@ -2026,11 +2294,11 @@ Menu_Install(){
 	Print_Output false "Creating database table and enabling write-ahead logging..." "$PASS"
 	{
 		echo "PRAGMA journal_mode=WAL;"
+		echo "PRAGMA temp_store=1;"
 		echo "CREATE TABLE IF NOT EXISTS [dnsqueries] ([QueryID] INTEGER PRIMARY KEY NOT NULL,[Timestamp] NUMERIC NOT NULL,[SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL);"
 	}  > /tmp/uidivstats-upgrade.sql
-	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1; do
-		sleep 1
-	done
+	while ! "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-upgrade.sql >/dev/null 2>&1
+	do sleep 1 ; done
 
 	Print_Output false "Creating database table indexes..." "$PASS"
 	Table_Indexes drop
@@ -2192,7 +2460,8 @@ Menu_EditExcludeList()
 	Clear_Lock
 }
 
-Menu_ResetDB(){
+Menu_ResetDB()
+{
 	printf "${BOLD}\\e[33mWARNING: This will reset the %s database by deleting all database records.\\n" "$SCRIPT_NAME"
 	printf "A backup of the database will be created if you change your mind.${CLEARFORMAT}\\n"
 	printf "\\n${BOLD}Do you want to continue? (y/n)${CLEARFORMAT}  "
@@ -2200,7 +2469,7 @@ Menu_ResetDB(){
 	case "$confirm" in
 		y|Y)
 			printf "\\n"
-			Reset_DB .bak
+			Reset_DB ".bak"
 		;;
 		*)
 			printf "\\n${BOLD}\\e[33mDatabase reset cancelled${CLEARFORMAT}\\n\\n"
@@ -2288,8 +2557,10 @@ Menu_Uninstall(){
 	Print_Output true "Uninstall completed" "$PASS"
 }
 
-NTP_Ready(){
-	if [ "$(nvram get ntp_ready)" -eq 0 ]; then
+NTP_Ready()
+{
+	if [ "$(nvram get ntp_ready)" -eq 0 ]
+	then
 		Check_Lock
 		ntpwaitcount=0
 		while [ "$(nvram get ntp_ready)" -eq 0 ] && [ "$ntpwaitcount" -lt 600 ]; do
@@ -2309,17 +2580,19 @@ NTP_Ready(){
 }
 
 ### function based on @Adamm00's Skynet USB wait function ###
-Entware_Ready(){
-	if [ ! -f /opt/bin/opkg ]; then
+Entware_Ready()
+{
+	if [ ! -f /opt/bin/opkg ]
+	then
 		Check_Lock
 		sleepcount=1
 		while [ ! -f /opt/bin/opkg ] && [ "$sleepcount" -le 10 ]; do
-			Print_Output true "Entware not found, sleeping for 10s (attempt $sleepcount of 10)" "$ERR"
+			Print_Output true "Entware NOT found, sleeping for 10s (attempt $sleepcount of 10)" "$ERR"
 			sleepcount="$((sleepcount + 1))"
 			sleep 10
 		done
 		if [ ! -f /opt/bin/opkg ]; then
-			Print_Output true "Entware not found and is required for $SCRIPT_NAME to run, please resolve" "$CRIT"
+			Print_Output true "Entware NOT found and is required for $SCRIPT_NAME to run, please resolve" "$CRIT"
 			Clear_Lock
 			exit 1
 		else
@@ -2368,6 +2641,13 @@ EOF
 	printf "\\n"
 }
 ### ###
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Oct-26] ##
+##-------------------------------------##
+TMPDIR="$SCRIPT_USB_DIR"
+SQLITE_TMPDIR="$TMPDIR"
+export SQLITE_TMPDIR TMPDIR
 
 if [ $# -eq 0 ] || [ -z "$1" ]
 then
