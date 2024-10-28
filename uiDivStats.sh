@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Oct-26
+# Last Modified: 2024-Oct-27
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -47,11 +47,12 @@ readonly DIVERSION_DIR="/opt/share/diversion"
 readonly STATSEXCLUDE_LIST_FILE="$SCRIPT_DIR/statsexcludelist"
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2024-Oct-27] ##
 ##----------------------------------------##
 # For daily CRON job to trim database #
 readonly defTrimDB_Hour=0
 readonly defTrimDB_Mins=1
+readonly trimLOGFileSize=65536
 readonly trimLOGFilePath="${SCRIPT_USB_DIR}/uiDivStats_Trim.LOG"
 readonly trimTMPOldsFile="${SCRIPT_USB_DIR}/uiDivStats_Olds.TMP"
 readonly trimLogDateForm="%Y-%m-%d %H:%M:%S"
@@ -1714,11 +1715,20 @@ Generate_Stats_From_SQLite()
 }
 
 ##-------------------------------------##
+## Added by Martinski W. [2024-Oct-27] ##
+##-------------------------------------##
+_GetFileSize_()
+{
+   [ ! -s "$1" ] && echo 0 && return 1
+   ls -1l "$1" | awk -F ' ' '{print $3}'
+}
+
+##-------------------------------------##
 ## Added by Martinski W. [2024-Oct-26] ##
 ##-------------------------------------##
 _ShowDatabaseFileInfo_()
 {
-   [ ! -s "$1" ] && return 1
+   [ ! -s "$1" ] && echo 0 && return 1
    local fileSize  fileInfo
    fileSize="$(ls -1lh "$1" | awk -F ' ' '{print $3}')"
    fileInfo="$(ls -1l "$1" | awk -F ' ' '{print $3,$4,$5,$6,$7}')"
@@ -1808,6 +1818,7 @@ Optimise_DNS_DB()
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 	printf "Database analysis and optimization process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 	printf "$(_GetTrimLogTimeStamp_) END.\n" | tee -a "$trimLOGFilePath"
+	echo "=============================================================" >> "$trimLOGFilePath"
 
 	rm -f /tmp/uidivstats-trim.sql
 	Print_Output true "Database analysis and optimization completed." "$PASS"
@@ -1816,7 +1827,7 @@ Optimise_DNS_DB()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2024-Oct-27] ##
 ##----------------------------------------##
 Trim_DNS_DB()
 {
@@ -1830,7 +1841,7 @@ Trim_DNS_DB()
 	local triesCount  maxTriesCount  foundLocked  resultStr
 	local trimErrorsFound  trimNumLocked  oldestRecsFound
 
-	if [ -s "$trimLOGFilePath" ]
+	if [ "$(_GetFileSize_ "$trimLOGFilePath")" -gt "$trimLOGFileSize" ]
 	then
 	    cp -fp "$trimLOGFilePath" "${trimLOGFilePath}.BAK"
 	    rm -f "$trimLOGFilePath"
