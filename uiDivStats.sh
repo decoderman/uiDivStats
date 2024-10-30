@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Oct-27
+# Last Modified: 2024-Oct-30
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -1714,13 +1714,18 @@ Generate_Stats_From_SQLite()
 	echo "];" >> "$CSV_OUTPUT_DIR/ipdistinctclients.js"
 }
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Oct-27] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-30] ##
+##----------------------------------------##
 _GetFileSize_()
 {
+   local opts
    [ ! -s "$1" ] && echo 0 && return 1
-   ls -1l "$1" | awk -F ' ' '{print $3}'
+   if [ $# -eq 1 ]
+   then opts="-1l"
+   else opts="-1lh"
+   fi
+   ls $opts "$1" | awk -F ' ' '{print $3}'
 }
 
 ##-------------------------------------##
@@ -2066,7 +2071,7 @@ ScriptHeader(){
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-13] ##
+## Modified by Martinski W. [2024-Oct-30] ##
 ##----------------------------------------##
 MainMenu()
 {
@@ -2080,11 +2085,12 @@ MainMenu()
 	printf "6.    Set the hour for daily cron job to trim the database\\n      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
 	printf "q.    Toggle query mode\\n      Currently ${SETTING}%s${CLEARFORMAT} query types will be logged\\n\\n" "$(QueryMode check)"
 	printf "c.    Toggle cache mode\\n      Currently ${SETTING}%s${CLEARFORMAT} being used to cache query records\\n\\n" "$(CacheMode check)"
-	printf "u.    Check for updates\\n"
-	printf "uf.   Update %s with latest version (force update)\\n\\n" "$SCRIPT_NAME"
-	printf "r.    Reset %s database / delete all data\\n\\n" "$SCRIPT_NAME"
-	printf "e.    Exit %s\\n\\n" "$SCRIPT_NAME"
-	printf "z.    Uninstall %s\\n" "$SCRIPT_NAME"
+	printf "u.    Check for updates\n"
+	printf "uf.   Update %s with latest version (force update)\n\n" "$SCRIPT_NAME"
+	printf "r.    Reset %s database / delete all data\n" "$SCRIPT_NAME"
+	printf "      [Current database file size: ${SETTING}%sB${CLEARFORMAT}]\n\n" "$(_GetFileSize_ "$DNS_DB" HR)"
+	printf "e.    Exit %s\n\n" "$SCRIPT_NAME"
+	printf "z.    Uninstall %s\n" "$SCRIPT_NAME"
 	printf "\\n"
 	printf "${BOLD}###################################################################${CLEARFORMAT}\\n"
 	printf "\\n"
