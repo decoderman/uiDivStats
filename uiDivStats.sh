@@ -1440,12 +1440,12 @@ Generate_NG()
 	fi
 
 	databaseFileSize="$(_GetFileSize_ "$DNS_DB" HR)B"
-	if ! grep -q "^var DatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
+	if ! grep -q "^var sqlDatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
 	then
-		sed -i "1 i var DatabaseFileSize = \"${databaseFileSize}\";" "$SCRIPT_USB_DIR/SQLData.js"
+		sed -i "1 i var sqlDatabaseFileSize = '${databaseFileSize}';" "$SCRIPT_USB_DIR/SQLData.js"
 	fi
 
-	echo "Stats last updated: $timenowfriendly [Database Size: $databaseFileSize]" > /tmp/uidivstatstitle.txt
+	echo "Stats last updated: $timenowfriendly" > /tmp/uidivstatstitle.txt
 	WriteStats_ToJS /tmp/uidivstatstitle.txt "$SCRIPT_USB_DIR/SQLData.js" SetuiDivStatsTitle statstitle
 	echo 'var uidivstatsstatus = "Done";' > /tmp/detect_uidivstats.js
 	Print_Output true "Stats updated successfully" "$PASS"
@@ -1500,11 +1500,11 @@ Generate_Query_Log()
 	rm -f "$CSV_OUTPUT_DIR/SQLQueryLog.tmp"
 
 	databaseFileSize="$(_GetFileSize_ "$DNS_DB" HR)B"
-	if ! grep -q "^var DatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
+	if ! grep -q "^var sqlDatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
 	then
-		sed -i "1 i var DatabaseFileSize = \"${databaseFileSize}\";" "$SCRIPT_USB_DIR/SQLData.js"
+		sed -i "1 i var sqlDatabaseFileSize = '${databaseFileSize}';" "$SCRIPT_USB_DIR/SQLData.js"
 	else
-		WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "DatabaseFileSize,\"${databaseFileSize}\""
+		WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "sqlDatabaseFileSize,'${databaseFileSize}'"
 	fi
 }
 
