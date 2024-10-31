@@ -1067,16 +1067,24 @@ WriteStats_ToJS(){
 	printf "%s;}\\r\\n" "$html" >> "$2"
 }
 
-WritePlainData_ToJS(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Oct-30] ##
+##----------------------------------------##
+WritePlainData_ToJS()
+{
 	outputfile="$1"
 	shift
-	for var in "$@"; do
+	for var in "$@"
+	do
 		varname="$(echo "$var" | cut -f1 -d',')"
 		varvalue="$(echo "$var" | cut -f2 -d',')"
-		if [ -f "$outputfile" ]; then
-			sed -i -e '/'"$varname"'/d' "$outputfile"
+		if [ -f "$outputfile" ] && \
+		   grep -q "^var $varname =" "$outputfile"
+		then
+		    sed -i "s/^var $varname =.*/var $varname = ${varvalue};/" "$outputfile"
+		else
+		    echo "var $varname = ${varvalue};" >> "$outputfile"
 		fi
-		echo "var $varname = $varvalue;" >> "$outputfile"
 	done
 }
 
@@ -1352,7 +1360,7 @@ Write_KeyStats_Sql_ToFile()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2024-Oct-30] ##
 ##----------------------------------------##
 Generate_NG()
 {
@@ -1431,7 +1439,13 @@ Generate_NG()
 		TempTime_Table drop monthly
 	fi
 
-	echo "Stats last updated: $timenowfriendly" > /tmp/uidivstatstitle.txt
+	databaseFileSize="$(_GetFileSize_ "$DNS_DB" HR)B"
+	if ! grep -q "^var DatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
+	then
+		sed -i "1 i var DatabaseFileSize = \"${databaseFileSize}\";" "$SCRIPT_USB_DIR/SQLData.js"
+	fi
+
+	echo "Stats last updated: $timenowfriendly [Database Size: $databaseFileSize]" > /tmp/uidivstatstitle.txt
 	WriteStats_ToJS /tmp/uidivstatstitle.txt "$SCRIPT_USB_DIR/SQLData.js" SetuiDivStatsTitle statstitle
 	echo 'var uidivstatsstatus = "Done";' > /tmp/detect_uidivstats.js
 	Print_Output true "Stats updated successfully" "$PASS"
@@ -1439,11 +1453,12 @@ Generate_NG()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2024-Oct-30] ##
 ##----------------------------------------##
 Generate_Query_Log()
 {
-	if [ -n "$PPID" ]; then
+	if [ -n "$PPID" ]
+	then
 		ps | grep -v grep | grep -v $$ | grep -v "$PPID" | grep -i "$SCRIPT_NAME" | grep querylog | awk '{print $1}' | xargs kill -9 >/dev/null 2>&1
 	else
 		ps | grep -v grep | grep -v $$ | grep -i "$SCRIPT_NAME" | grep querylog | awk '{print $1}' | xargs kill -9 >/dev/null 2>&1
@@ -1483,6 +1498,14 @@ Generate_Query_Log()
 	fi
 	rm -f /tmp/cache-uiDivStats-SQL.tmp.ordered
 	rm -f "$CSV_OUTPUT_DIR/SQLQueryLog.tmp"
+
+	databaseFileSize="$(_GetFileSize_ "$DNS_DB" HR)B"
+	if ! grep -q "^var DatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
+	then
+		sed -i "1 i var DatabaseFileSize = \"${databaseFileSize}\";" "$SCRIPT_USB_DIR/SQLData.js"
+	else
+		WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "DatabaseFileSize,\"${databaseFileSize}\""
+	fi
 }
 
 Generate_KeyStats()
