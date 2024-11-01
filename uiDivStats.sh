@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Oct-30
+# Last Modified: 2024-Nov-01
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -279,8 +279,10 @@ Update_Version()
 	fi
 }
 
-Update_File(){
-	if [ "$1" = "uidivstats_www.asp" ]; then
+Update_File()
+{
+	if [ "$1" = "uidivstats_www.asp" ]
+	then
 		tmpfile="/tmp/$1"
 		Download_File "$SCRIPT_REPO/$1" "$tmpfile"
 		if [ -f "$SCRIPT_DIR/$1" ]; then
@@ -298,10 +300,12 @@ Update_File(){
 			Mount_WebUI
 		fi
 		rm -f "$tmpfile"
-	elif [ "$1" = "taildns.tar.gz" ]; then
-		if [ ! -f "$SCRIPT_DIR/$1.md5" ]; then
+	elif [ "$1" = "taildns.tar.gz" ]
+	then
+		if [ ! -f "$SCRIPT_DIR/${1}.md5" ]
+		then
 			Download_File "$SCRIPT_REPO/$1" "$SCRIPT_DIR/$1"
-			Download_File "$SCRIPT_REPO/$1.md5" "$SCRIPT_DIR/$1.md5"
+			Download_File "$SCRIPT_REPO/${1}.md5" "$SCRIPT_DIR/${1}.md5"
 			tar -xzf "$SCRIPT_DIR/$1" -C "$SCRIPT_DIR"
 			if [ -f /opt/etc/init.d/S90taildns ]; then
 				/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
@@ -312,11 +316,12 @@ Update_File(){
 			rm -f "$SCRIPT_DIR/$1"
 			Print_Output true "New version of $1 downloaded" "$PASS"
 		else
-			localmd5="$(cat "$SCRIPT_DIR/$1.md5")"
-			remotemd5="$(curl -fsL --retry 3 "$SCRIPT_REPO/$1.md5")"
-			if [ "$localmd5" != "$remotemd5" ]; then
+			localmd5="$(cat "$SCRIPT_DIR/${1}.md5")"
+			remotemd5="$(curl -fsL --retry 3 "$SCRIPT_REPO/${1}.md5")"
+			if [ "$localmd5" != "$remotemd5" ]
+			then
 				Download_File "$SCRIPT_REPO/$1" "$SCRIPT_DIR/$1"
-				Download_File "$SCRIPT_REPO/$1.md5" "$SCRIPT_DIR/$1.md5"
+				Download_File "$SCRIPT_REPO/${1}.md5" "$SCRIPT_DIR/${1}.md5"
 				tar -xzf "$SCRIPT_DIR/$1" -C "$SCRIPT_DIR"
 				if [ -f /opt/etc/init.d/S90taildns ]; then
 					/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
@@ -328,19 +333,22 @@ Update_File(){
 				Print_Output true "New version of $1 downloaded" "$PASS"
 			fi
 		fi
-	elif [ "$1" = "shared-jy.tar.gz" ]; then
-		if [ ! -f "$SHARED_DIR/$1.md5" ]; then
+	elif [ "$1" = "shared-jy.tar.gz" ]
+	then
+		if [ ! -f "$SHARED_DIR/${1}.md5" ]
+		then
 			Download_File "$SHARED_REPO/$1" "$SHARED_DIR/$1"
-			Download_File "$SHARED_REPO/$1.md5" "$SHARED_DIR/$1.md5"
+			Download_File "$SHARED_REPO/${1}.md5" "$SHARED_DIR/${1}.md5"
 			tar -xzf "$SHARED_DIR/$1" -C "$SHARED_DIR"
 			rm -f "$SHARED_DIR/$1"
 			Print_Output true "New version of $1 downloaded" "$PASS"
 		else
-			localmd5="$(cat "$SHARED_DIR/$1.md5")"
-			remotemd5="$(curl -fsL --retry 3 "$SHARED_REPO/$1.md5")"
-			if [ "$localmd5" != "$remotemd5" ]; then
+			localmd5="$(cat "$SHARED_DIR/${1}.md5")"
+			remotemd5="$(curl -fsL --retry 3 "$SHARED_REPO/${1}.md5")"
+			if [ "$localmd5" != "$remotemd5" ]
+			then
 				Download_File "$SHARED_REPO/$1" "$SHARED_DIR/$1"
-				Download_File "$SHARED_REPO/$1.md5" "$SHARED_DIR/$1.md5"
+				Download_File "$SHARED_REPO/${1}.md5" "$SHARED_DIR/${1}.md5"
 				tar -xzf "$SHARED_DIR/$1" -C "$SHARED_DIR"
 				rm -f "$SHARED_DIR/$1"
 				Print_Output true "New version of $1 downloaded" "$PASS"
@@ -1048,9 +1056,14 @@ _TrimDatabaseTime_()
    esac
 }
 
-UpdateDiversionWeeklyStatsFile(){
+##----------------------------------------##
+## Modified by Martinski W. [2024-Nov-01] ##
+##----------------------------------------##
+UpdateDiversionWeeklyStatsFile()
+{
 	rm -f "$SCRIPT_WEB_DIR/DiversionStats.htm" 2>/dev/null
-	diversionstatsfile="$(/opt/bin/find /opt/share/diversion/stats -name "Diversion_Stats*" -printf "%C@ %p\n"| sort | tail -n 1 | cut -f2 -d' ')"
+	diversionstatsfile="$(/opt/bin/find "${DIVERSION_DIR}/stats" -name "Diversion_Stats*" -printf "%C@ %p\n"| sort | tail -n 1 | cut -f2 -d' ')"
+    [ -n "$diversionstatsfile" ] && [ -f "$diversionstatsfile" ] && \
 	ln -s "$diversionstatsfile" "$SCRIPT_WEB_DIR/DiversionStats.htm" 2>/dev/null
 }
 
@@ -1591,10 +1604,11 @@ Generate_KeyStats()
 	rm -f /tmp/queriesBlocked*
 }
 
-Generate_Count_Blocklist_Domains(){
-	blockinglistfile="$DIVERSION_DIR/list/blockinglist.conf"
+Generate_Count_Blocklist_Domains()
+{
+	blockinglistfile="${DIVERSION_DIR}/list/blockinglist.conf"
 
-	blocklistdomains="$(cat $blockinglistfile | wc -l)"
+	blocklistdomains="$(cat "$blockinglistfile" | wc -l)"
 
 	if ! Validate_Number "$blocklistdomains"; then blocklistdomains=0; fi
 
@@ -2094,29 +2108,29 @@ ScriptHeader(){
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-30] ##
+## Modified by Martinski W. [2024-Nov-01] ##
 ##----------------------------------------##
 MainMenu()
 {
-	printf "WebUI for %s is available at:\\n${SETTING}%s${CLEARFORMAT}\\n\\n" "$SCRIPT_NAME" "$(Get_WebUI_URL)"
-	printf "1.    Update Diversion Statistics (daily only)\\n\\n"
-	printf "2.    Update Diversion Statistics (daily, weekly and monthly)\\n"
-	printf "      WARNING: THIS MAY TAKE A WHILE (>5 minutes)\\n\\n"
-	printf "3.    Edit list of domains to exclude from %s statistics\\n\\n" "$SCRIPT_NAME"
-	printf "4.    Set number of recent DNS queries to show in WebUI\\n      Currently: ${SETTING}%s queries will be shown${CLEARFORMAT}\\n\\n" "$(LastXQueries check)"
-	printf "5.    Set number of days data to keep in database\\n      Currently: ${SETTING}%s days data will be kept${CLEARFORMAT}\\n\\n" "$(DaysToKeep check)"
-	printf "6.    Set the hour for daily cron job to trim the database\\n      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
-	printf "q.    Toggle query mode\\n      Currently ${SETTING}%s${CLEARFORMAT} query types will be logged\\n\\n" "$(QueryMode check)"
-	printf "c.    Toggle cache mode\\n      Currently ${SETTING}%s${CLEARFORMAT} being used to cache query records\\n\\n" "$(CacheMode check)"
+	printf "WebUI for %s is available at:\n${SETTING}%s${CLEARFORMAT}\n\n" "$SCRIPT_NAME" "$(Get_WebUI_URL)"
+	printf "1.    Update Diversion Statistics (daily only)\n"
+	printf "      [Database Size: ${SETTING}%sB${CLEARFORMAT}]\n\n" "$(_GetFileSize_ "$DNS_DB" HR)"
+	printf "2.    Update Diversion Statistics (daily, weekly and monthly)\n"
+	printf "      WARNING: THIS MAY TAKE A WHILE (>5 minutes)\n\n"
+	printf "3.    Edit list of domains to exclude from %s statistics\n\n" "$SCRIPT_NAME"
+	printf "4.    Set number of recent DNS queries to show in WebUI\n      Currently: ${SETTING}%s queries will be shown${CLEARFORMAT}\n\n" "$(LastXQueries check)"
+	printf "5.    Set number of days data to keep in database\n      Currently: ${SETTING}%s days data will be kept${CLEARFORMAT}\n\n" "$(DaysToKeep check)"
+	printf "6.    Set the hour for daily cron job to trim the database\n      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
+	printf "q.    Toggle query mode\n      Currently ${SETTING}%s${CLEARFORMAT} query types will be logged\n\n" "$(QueryMode check)"
+	printf "c.    Toggle cache mode\n      Currently ${SETTING}%s${CLEARFORMAT} being used to cache query records\n\n" "$(CacheMode check)"
 	printf "u.    Check for updates\n"
 	printf "uf.   Update %s with latest version (force update)\n\n" "$SCRIPT_NAME"
-	printf "r.    Reset %s database / delete all data\n" "$SCRIPT_NAME"
-	printf "      [Current database file size: ${SETTING}%sB${CLEARFORMAT}]\n\n" "$(_GetFileSize_ "$DNS_DB" HR)"
+	printf "r.    Reset %s database / delete all data\n\n" "$SCRIPT_NAME"
 	printf "e.    Exit %s\n\n" "$SCRIPT_NAME"
 	printf "z.    Uninstall %s\n" "$SCRIPT_NAME"
-	printf "\\n"
-	printf "${BOLD}###################################################################${CLEARFORMAT}\\n"
-	printf "\\n"
+	printf "\n"
+	printf "${BOLD}###################################################################${CLEARFORMAT}\n"
+	printf "\n"
 
 	while true
 	do
@@ -2188,7 +2202,7 @@ MainMenu()
 				break
 			;;
 			u)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					Update_Version
 					Clear_Lock
@@ -2197,7 +2211,7 @@ MainMenu()
 				break
 			;;
 			uf)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					Update_Version force
 					Clear_Lock
@@ -2206,7 +2220,7 @@ MainMenu()
 				break
 			;;
 			r)
-				printf "\\n"
+				printf "\n"
 				if Check_Lock menu; then
 					Menu_ResetDB
 					Clear_Lock
@@ -2236,7 +2250,7 @@ MainMenu()
 				break
 			;;
 			*)
-				printf "\\nPlease choose a valid option\\n\\n"
+				printf "\nPlease choose a valid option\n\n"
 			;;
 		esac
 	done
@@ -2683,9 +2697,10 @@ EOF
 ### ###
 
 ##-------------------------------------##
-## Added by Martinski W. [2024-Oct-26] ##
+## Added by Martinski W. [2024-Nov-01] ##
 ##-------------------------------------##
-TMPDIR="$SCRIPT_USB_DIR"
+[ ! -d /opt/share/tmp ] && mkdir -m 777 -p /opt/share/tmp
+TMPDIR="/opt/share/tmp"
 SQLITE_TMPDIR="$TMPDIR"
 export SQLITE_TMPDIR TMPDIR
 
