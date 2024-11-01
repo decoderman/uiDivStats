@@ -1,6 +1,9 @@
 #!/bin/sh
+# Last Modified: 2024-Nov-01 [Martinski W.]
+#-------------------------------------------
 # shellcheck disable=SC2039
 # shellcheck disable=SC3048
+#-------------------------------------------
 trap '' SIGHUP
 
 if [ ! -f /opt/bin/pkill ]; then
@@ -8,15 +11,16 @@ if [ ! -f /opt/bin/pkill ]; then
 	opkg install procps-ng-pkill
 fi
 
-cachemode="$(grep "CACHEMODE" /jffs/addons/uiDivStats.d/config | cut -f2 -d"=")"
+cachemode="$(grep "^CACHEMODE=" /jffs/addons/uiDivStats.d/config | cut -f2 -d'=')"
 taildnsfilesuffix=""
 if [ "$cachemode" = "tmp" ]; then
 	taildnsfilesuffix="-cache"
 fi
 
 ntpwaitcount=0
-# Wait for NTP before starting
-while [ "$(nvram get ntp_ready)" -eq 0 ] && [ "$ntpwaitcount" -lt 600 ]; do
+# Wait for NTP before starting #
+while [ "$(nvram get ntp_ready)" -eq 0 ] && [ "$ntpwaitcount" -lt 600 ]
+do
 	ntpwaitcount="$((ntpwaitcount + 30))"
 	logger -st taildns "Waiting for NTP to sync..." "$WARN"
 	sleep 30
@@ -29,9 +33,11 @@ fi
 
 /jffs/addons/uiDivStats.d/taildns.d/taildnstotal"$taildnsfilesuffix" &
 
-while true; do
+while true
+do
 	sleep 5
-	if [ "$(pidof "taildnstotal$taildnsfilesuffix" | wc -w)" -lt 2 ]; then
+	if [ "$(pidof "taildnstotal$taildnsfilesuffix" | wc -w)" -lt 2 ]
+	then
 		logger -t uiDivStats "taildns dead, restarting..."
 		killall -q "taildnstotal$taildnsfilesuffix"
 		/opt/bin/pkill -f "tail -F /opt/var/log/dnsmasq.log /opt/var/log/dnsmasq.log3"
