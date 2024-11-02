@@ -52,6 +52,7 @@ readonly STATSEXCLUDE_LIST_FILE="$SCRIPT_DIR/statsexcludelist"
 # For daily CRON job to trim database #
 readonly defTrimDB_Hour=0
 readonly defTrimDB_Mins=1
+readonly defGenrDB_Mins=10
 readonly trimLOGFileSize=65536
 readonly trimLOGFilePath="${SCRIPT_USB_DIR}/uiDivStats_Trim.LOG"
 readonly trimTMPOldsFile="${SCRIPT_USB_DIR}/uiDivStats_Olds.TMP"
@@ -447,7 +448,7 @@ Create_Symlinks(){
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-13] ##
+## Modified by Martinski W. [2024-Nov-01] ##
 ##----------------------------------------##
 Conf_Exists()
 {
@@ -462,8 +463,8 @@ Conf_Exists()
 		if ! grep -q "^TRIMDB_HOUR=" "$SCRIPT_CONF"; then
 			echo "TRIMDB_HOUR=$defTrimDB_Hour" >> "$SCRIPT_CONF"
 		fi
-		if ! grep -q "^TRIMDB_MINS=" "$SCRIPT_CONF"; then
-			echo "TRIMDB_MINS=$defTrimDB_Mins" >> "$SCRIPT_CONF"
+		if grep -q "^TRIMDB_MINS=" "$SCRIPT_CONF"; then
+			sed -i "/^TRIMDB_MINS=/d" "$SCRIPT_CONF"
 		fi
 		if ! grep -q "^LASTXQUERIES=" "$SCRIPT_CONF"; then
 			echo "LASTXQUERIES=5000" >> "$SCRIPT_CONF"
@@ -479,7 +480,7 @@ Conf_Exists()
 	else
 		{ echo "QUERYMODE=all"; echo "CACHEMODE=tmp"
 		  echo "DAYSTOKEEP=30"; echo "LASTXQUERIES=5000"
-		  echo "TRIMDB_HOUR=$defTrimDB_Hour" ; echo "TRIMDB_MINS=$defTrimDB_Mins"
+		  echo "TRIMDB_HOUR=$defTrimDB_Hour"
 		} > "$SCRIPT_CONF"
 		return 1
 	fi
@@ -567,7 +568,7 @@ Auto_Startup(){
 
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2024-Nov-01] ##
 ##----------------------------------------##
 Auto_Cron()
 {
@@ -578,28 +579,28 @@ Auto_Cron()
 			STARTUPLINECOUNTQUERYLOG="$(cru l | grep -c "${SCRIPT_NAME}_querylog")"
 			STARTUPLINECOUNTFLUSHTODB="$(cru l | grep -c "${SCRIPT_NAME}_flushtodb")"
 
-			STARTUPLINECOUNTEXGENERATE="$(cru l | grep "${SCRIPT_NAME}_generate" | grep -c ' 1-23 ')"
+			STARTUPLINECOUNTEXGENERATE="$(cru l | grep "${SCRIPT_NAME}_generate" | grep -c "^$defGenrDB_Mins [*] ")"
 			if [ "$STARTUPLINECOUNTGENERATE" -ne 0 ] && [ "$STARTUPLINECOUNTEXGENERATE" -eq 0 ]
 			then
 				cru d "${SCRIPT_NAME}_generate"
 				STARTUPLINECOUNTGENERATE="$(cru l | grep -c "${SCRIPT_NAME}_generate")"
 			fi
 
-			STARTUPLINECOUNTEXTRIM="$(cru l | grep "${SCRIPT_NAME}_trim" | grep -c "^$(_TrimDatabaseTime_ mins) ")"
+			STARTUPLINECOUNTEXTRIM="$(cru l | grep "${SCRIPT_NAME}_trim" | grep -c "^$defTrimDB_Mins ")"
 			if [ "$STARTUPLINECOUNTTRIM" -ne 0 ] && [ "$STARTUPLINECOUNTEXTRIM" -eq 0 ]
 			then
 				cru d "${SCRIPT_NAME}_trim"
 				STARTUPLINECOUNTTRIM="$(cru l | grep -c "${SCRIPT_NAME}_trim")"
 			fi
 
-			STARTUPLINECOUNTEXQUERYLOG="$(cru l | grep "${SCRIPT_NAME}_querylog" | grep -c '^[*]/3 ')"
+			STARTUPLINECOUNTEXQUERYLOG="$(cru l | grep "${SCRIPT_NAME}_querylog" | grep -c '^[*]/3 [*] ')"
 			if [ "$STARTUPLINECOUNTQUERYLOG" -ne 0 ] && [ "$STARTUPLINECOUNTEXQUERYLOG" -eq 0 ]
 			then
 				cru d "${SCRIPT_NAME}_querylog"
 				STARTUPLINECOUNTQUERYLOG="$(cru l | grep -c "${SCRIPT_NAME}_querylog")"
 			fi
 
-			STARTUPLINECOUNTEXFLUSHTODB="$(cru l | grep "${SCRIPT_NAME}_flushtodb" | grep -c '^4-59/5 ')"
+			STARTUPLINECOUNTEXFLUSHTODB="$(cru l | grep "${SCRIPT_NAME}_flushtodb" | grep -c '^4-59/5 [*] ')"
 			if [ "$STARTUPLINECOUNTFLUSHTODB" -ne 0 ] && [ "$STARTUPLINECOUNTEXFLUSHTODB" -eq 0 ]
 			then
 				cru d "${SCRIPT_NAME}_flushtodb"
@@ -607,10 +608,10 @@ Auto_Cron()
 			fi
 
 			if [ "$STARTUPLINECOUNTGENERATE" -eq 0 ]; then
-				cru a "${SCRIPT_NAME}_generate" "0 1-23 * * * /jffs/scripts/$SCRIPT_NAME generate"
+				cru a "${SCRIPT_NAME}_generate" "$defGenrDB_Mins * * * * /jffs/scripts/$SCRIPT_NAME generate"
 			fi
 			if [ "$STARTUPLINECOUNTTRIM" -eq 0 ]; then
-				cru a "${SCRIPT_NAME}_trim" "$(_TrimDatabaseTime_ mins) $(_TrimDatabaseTime_ hour) * * * /jffs/scripts/$SCRIPT_NAME trimdb"
+				cru a "${SCRIPT_NAME}_trim" "$defTrimDB_Mins $(_TrimDatabaseTime_ hour) * * * /jffs/scripts/$SCRIPT_NAME trimdb"
 			fi
 			if [ "$STARTUPLINECOUNTQUERYLOG" -eq 0 ]; then
 				cru a "${SCRIPT_NAME}_querylog" "*/3 * * * * /jffs/scripts/$SCRIPT_NAME querylog"
@@ -935,7 +936,7 @@ _ValidateCronJobMins_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2024-Nov-01] ##
 ##----------------------------------------##
 #----------------------------------------------------------
 # NOTE: The cron job minutes should *NOT* be modified
@@ -945,83 +946,47 @@ _ValidateCronJobMins_()
 _TrimDatabaseTime_()
 {
    case "$1" in
-       update) 
-           trimDBhour="$(_TrimDatabaseTime_ hour)"
-           trimDBmins="$(_TrimDatabaseTime_ mins)"
+       update)
            trimDBtime12hr="$(_TrimDatabaseTime_ time12hr)"
            trimDBtime24hr="$(_TrimDatabaseTime_ time24hr)"
-           getTrimDBhour=true ; exitTrimDBhour=false
-           getTrimDBmins=false ; exitTrimDBmins=false
+           trimDBhour="$(_TrimDatabaseTime_ hour)"
+           TRIMDB_HOUR="$trimDBhour"
+           exitLoop=false
            while true
            do
                ScriptHeader
                printf "${BOLD}Current schedule: ${GRNct}Daily at $trimDBtime24hr [$trimDBtime12hr]${CLEARct}\n"
-               if "$getTrimDBhour"
+               printf "\n${BOLD}Enter schedule HOUR [0-23] (e=Exit):${CLEARFORMAT}  "
+               read -r newTrimDBhour
+               if [ -z "$newTrimDBhour" ] && _ValidateCronJobHour_ "$trimDBhour"
                then
-                   printf "\n${BOLD}Enter schedule HOUR [0-23]:${CLEARFORMAT}  "
-                   read -r newTrimDBhour
-                   if [ -z "$newTrimDBhour" ] && _ValidateCronJobHour_ "$trimDBhour"
-                   then
-                       getTrimDBhour=false
-                       exitTrimDBhour=true
-                       if ! "$getTrimDBmins"
-                       then exitTrimDBmins=true ; break ; fi
-                   elif [ "$newTrimDBhour" = "exit" ]
-                   then
-                       getTrimDBhour=false
-                       exitTrimDBhour=true
-                       if ! "$getTrimDBmins"
-                       then exitTrimDBmins=true ; break ; fi
-                   elif ! _ValidateCronJobHour_ "$newTrimDBhour"
-                   then
-                       printf "\n${ERR}Please enter a valid hour [0-23].${CLEARFORMAT}\n"
-                       PressEnter
-                       continue
-                   else
-                       trimDBhour="$newTrimDBhour"
-                       getTrimDBhour=false
-                       if ! "$getTrimDBmins"
-                       then exitTrimDBmins=true ; break ; fi
-                   fi
+                   exitLoop=true
+                   break
+               elif [ "$newTrimDBhour" = "e" ]
+               then
+                   exitLoop=true
+                   break
+               elif ! _ValidateCronJobHour_ "$newTrimDBhour"
+               then
+                   printf "\n${ERR}Please enter a valid hour [0-23].${CLEARFORMAT}\n"
+                   PressEnter
+                   continue
                else
-                   printf "\n${BOLD}Enter schedule HOUR [0-23]:${CLEARFORMAT}  ${newTrimDBhour}\n"
-               fi
-               if "$getTrimDBmins"
-               then
-                   printf "\n${BOLD}Enter schedule MINUTES [0-59]:${CLEARFORMAT}  "
-                   read -r newTrimDBmins
-                   if [ -z "$newTrimDBmins" ] && _ValidateCronJobMins_ "$trimDBmins"
-                   then
-                       getTrimDBmins=false
-                       exitTrimDBmins=true
-                       break
-                   elif [ "$newTrimDBmins" = "exit" ]
-                   then
-                       getTrimDBmins=false
-                       exitTrimDBmins=true
-                       break
-                   elif ! _ValidateCronJobMins_ "$newTrimDBmins"
-                   then
-                       printf "\n${ERR}Please enter valid minutes [0-59].${CLEARFORMAT}\n"
-                       PressEnter
-                       continue
-                   else
-                       trimDBmins="$newTrimDBmins"
-                       getTrimDBmins=false
-                       break
-                   fi
+                   trimDBhour="$newTrimDBhour"
+                   break
                fi
            done
 
-           if "$exitTrimDBhour" && "$exitTrimDBmins"
+           if "$exitLoop"
            then
                echo ; return 1
            else
-               TRIMDB_HOUR="$trimDBhour"
-               TRIMDB_MINS="$trimDBmins"
-               sed -i 's/^TRIMDB_HOUR.*$/TRIMDB_HOUR='"$TRIMDB_HOUR"'/' "$SCRIPT_CONF"
-               sed -i 's/^TRIMDB_MINS.*$/TRIMDB_MINS='"$TRIMDB_MINS"'/' "$SCRIPT_CONF"
-               cru a "${SCRIPT_NAME}_trim" "$TRIMDB_MINS $TRIMDB_HOUR * * * /jffs/scripts/$SCRIPT_NAME trimdb"
+               if [ "$trimDBhour" -ne "$TRIMDB_HOUR" ]
+               then
+                   TRIMDB_HOUR="$trimDBhour"
+                   sed -i 's/^TRIMDB_HOUR.*$/TRIMDB_HOUR='"$TRIMDB_HOUR"'/' "$SCRIPT_CONF"
+                   cru a "${SCRIPT_NAME}_trim" "$defTrimDB_Mins $TRIMDB_HOUR * * * /jffs/scripts/$SCRIPT_NAME trimdb"
+               fi
                echo ; return 0
            fi
            ;;
@@ -1029,17 +994,8 @@ _TrimDatabaseTime_()
            TRIMDB_HOUR="$(grep "^TRIMDB_HOUR=" "$SCRIPT_CONF" | cut -f2 -d"=")"
            echo "${TRIMDB_HOUR:=$defTrimDB_Hour}"
            ;;
-       mins)
-           TRIMDB_MINS="$(grep "^TRIMDB_MINS=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-           if [ "$TRIMDB_MINS" -ne "$defTrimDB_Mins" ]
-           then  # Reset to default value #
-               TRIMDB_MINS="$defTrimDB_Mins"
-               sed -i 's/^TRIMDB_MINS.*$/TRIMDB_MINS='"$TRIMDB_MINS"'/' "$SCRIPT_CONF"
-           fi
-           echo "${TRIMDB_MINS:=$defTrimDB_Mins}"
-           ;;
        time24hr)
-           printf "%02d:%02d" "$(_TrimDatabaseTime_ hour)" "$(_TrimDatabaseTime_ mins)"
+           printf "%02d:%02d" "$(_TrimDatabaseTime_ hour)" "$defTrimDB_Mins"
            ;;
        time12hr)
            ampmTag="AM"
@@ -1051,7 +1007,7 @@ _TrimDatabaseTime_()
            elif [ "$trimDBhour" -gt 12 ]
            then trimDBhour="$((trimDBhour - 12))" ; ampmTag="PM"
            fi
-           printf "%02d:%02d $ampmTag" "$trimDBhour" "$(_TrimDatabaseTime_ mins)"
+           printf "%02d:%02d $ampmTag" "$trimDBhour" "$defTrimDB_Mins"
            ;;
    esac
 }
@@ -1860,7 +1816,7 @@ Optimise_DNS_DB()
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 	printf "Database analysis and optimization process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 	printf "$(_GetTrimLogTimeStamp_) END.\n" | tee -a "$trimLOGFilePath"
-	echo "=============================================================" >> "$trimLOGFilePath"
+	echo "========================================" >> "$trimLOGFilePath"
 
 	rm -f /tmp/uidivstats-trim.sql
 	Print_Output true "Database analysis and optimization completed." "$PASS"
