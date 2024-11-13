@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Nov-01
+# Last Modified: 2024-Nov-12
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -57,6 +57,9 @@ readonly trimLOGFileSize=65536
 readonly trimLOGFilePath="${SCRIPT_USB_DIR}/uiDivStats_Trim.LOG"
 readonly trimTMPOldsFile="${SCRIPT_USB_DIR}/uiDivStats_Olds.TMP"
 readonly trimLogDateForm="%Y-%m-%d %H:%M:%S"
+readonly oneKByte=1024
+readonly oneMByte=1048576
+readonly oneGByte=1073741824
 
 ### End of script variables ###
 
@@ -917,6 +920,56 @@ LastXQueries()
 }
 
 ##-------------------------------------##
+## Added by Martinski W. [2024-Oct-30] ##
+##-------------------------------------##
+_GetFileSize_()
+{
+   local sizeType  fileSize  fileInfo
+   if [ $# -eq 0 ] || [ -z "$1" ] || [ ! -s "$1" ]
+   then echo 0; return 1 ; fi
+
+   if [ $# -eq 1 ] || [ -z "$2" ] || \
+      ! echo "$2" | grep -qE "^(B|KB|MB|GB|HR|HRx)$"
+   then sizeType="B" ; else sizeType="$2" ; fi
+   
+   _GetNum_() { printf "%.1f" "$(echo "$1" | awk "{print $1}")" ; }
+
+   case "$sizeType" in
+       B|KB|MB|GB)
+           fileSize="$(ls -1l "$1" | awk -F ' ' '{print $3}')"
+           case "$sizeType" in
+                B) fileInfo="$fileSize" ;;
+               KB) fileSize="$(_GetNum_ "($fileSize / $oneKByte)")" ;;
+               MB) fileSize="$(_GetNum_ "($fileSize / $oneMByte)")" ;;
+               GB) fileSize="$(_GetNum_ "($fileSize / $oneGByte)")" ;;
+           esac
+           echo "$fileSize"
+           ;;
+       HR|HRx)
+           fileSize="$(ls -1lh "$1" | awk -F ' ' '{print $3}')"
+           fileInfo="${fileSize}B"
+           if [ "$sizeType" = "HR" ]
+           then echo "$fileInfo" ; return 0 ; fi
+           sizeType="$(echo "$fileInfo" | tr -d '.0-9')"
+           case "$sizeType" in
+               KB) fileSize="$(_GetFileSize_ "$1" B)"
+                   fileInfo="${fileInfo} [${fileSize}B]"
+                   ;;
+               MB) fileSize="$(_GetFileSize_ "$1" KB)"
+                   fileInfo="${fileInfo} [${fileSize}KB]"
+                   ;;
+               GB) fileSize="$(_GetFileSize_ "$1" MB)"
+                   fileInfo="${fileInfo} [${fileSize}MB]"
+                   ;;
+           esac
+           echo "$fileInfo"
+           ;;
+       *) echo 0 ;;
+   esac
+   return 0
+}
+
+##-------------------------------------##
 ## Added by Martinski W. [2024-Oct-13] ##
 ##-------------------------------------##
 _ValidateCronJobHour_()
@@ -1328,8 +1381,23 @@ Write_KeyStats_Sql_ToFile()
 	fi
 }
 
+##-------------------------------------##
+## Added by Martinski W. [2024-Nov-12] ##
+##-------------------------------------##
+_UpdateDatabaseFileSizeInfo_()
+{
+   local databaseFileSize
+   databaseFileSize="$(_GetFileSize_ "$DNS_DB" HRx)"
+   if ! grep -q "^var sqlDatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
+   then
+       sed -i "1 i var sqlDatabaseFileSize = '${databaseFileSize}';" "$SCRIPT_USB_DIR/SQLData.js"
+   else
+       WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "sqlDatabaseFileSize,'${databaseFileSize}'"
+   fi
+}
+
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-30] ##
+## Modified by Martinski W. [2024-Nov-12] ##
 ##----------------------------------------##
 Generate_NG()
 {
@@ -1408,11 +1476,7 @@ Generate_NG()
 		TempTime_Table drop monthly
 	fi
 
-	databaseFileSize="$(_GetFileSize_ "$DNS_DB" HR)B"
-	if ! grep -q "^var sqlDatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
-	then
-		sed -i "1 i var sqlDatabaseFileSize = '${databaseFileSize}';" "$SCRIPT_USB_DIR/SQLData.js"
-	fi
+	_UpdateDatabaseFileSizeInfo_
 
 	echo "Stats last updated: $timenowfriendly" > /tmp/uidivstatstitle.txt
 	WriteStats_ToJS /tmp/uidivstatstitle.txt "$SCRIPT_USB_DIR/SQLData.js" SetuiDivStatsTitle statstitle
@@ -1422,7 +1486,7 @@ Generate_NG()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-30] ##
+## Modified by Martinski W. [2024-Nov-12] ##
 ##----------------------------------------##
 Generate_Query_Log()
 {
@@ -1468,13 +1532,7 @@ Generate_Query_Log()
 	rm -f /tmp/cache-uiDivStats-SQL.tmp.ordered
 	rm -f "$CSV_OUTPUT_DIR/SQLQueryLog.tmp"
 
-	databaseFileSize="$(_GetFileSize_ "$DNS_DB" HR)B"
-	if ! grep -q "^var sqlDatabaseFileSize =.*" "$SCRIPT_USB_DIR/SQLData.js"
-	then
-		sed -i "1 i var sqlDatabaseFileSize = '${databaseFileSize}';" "$SCRIPT_USB_DIR/SQLData.js"
-	else
-		WritePlainData_ToJS "$SCRIPT_USB_DIR/SQLData.js" "sqlDatabaseFileSize,'${databaseFileSize}'"
-	fi
+	_UpdateDatabaseFileSizeInfo_
 }
 
 Generate_KeyStats()
@@ -1705,20 +1763,6 @@ Generate_Stats_From_SQLite()
 	done
 	sed -i '$ s/,$//' "$CSV_OUTPUT_DIR/ipdistinctclients.js"
 	echo "];" >> "$CSV_OUTPUT_DIR/ipdistinctclients.js"
-}
-
-##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-30] ##
-##----------------------------------------##
-_GetFileSize_()
-{
-   local opts
-   [ ! -s "$1" ] && echo 0 && return 1
-   if [ $# -eq 1 ]
-   then opts="-1l"
-   else opts="-1lh"
-   fi
-   ls $opts "$1" | awk -F ' ' '{print $3}'
 }
 
 ##-------------------------------------##
@@ -2070,7 +2114,7 @@ MainMenu()
 {
 	printf "WebUI for %s is available at:\n${SETTING}%s${CLEARFORMAT}\n\n" "$SCRIPT_NAME" "$(Get_WebUI_URL)"
 	printf "1.    Update Diversion Statistics (daily only)\n"
-	printf "      [Database Size: ${SETTING}%sB${CLEARFORMAT}]\n\n" "$(_GetFileSize_ "$DNS_DB" HR)"
+	printf "      Database Size: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_GetFileSize_ "$DNS_DB" HRx)"
 	printf "2.    Update Diversion Statistics (daily, weekly and monthly)\n"
 	printf "      WARNING: THIS MAY TAKE A WHILE (>5 minutes)\n\n"
 	printf "3.    Edit list of domains to exclude from %s statistics\n\n" "$SCRIPT_NAME"
