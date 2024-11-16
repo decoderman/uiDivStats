@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Nov-12
+# Last Modified: 2024-Nov-15
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -952,9 +952,6 @@ _GetFileSize_()
            then echo "$fileInfo" ; return 0 ; fi
            sizeType="$(echo "$fileInfo" | tr -d '.0-9')"
            case "$sizeType" in
-               KB) fileSize="$(_GetFileSize_ "$1" B)"
-                   fileInfo="${fileInfo} [${fileSize}B]"
-                   ;;
                MB) fileSize="$(_GetFileSize_ "$1" KB)"
                    fileInfo="${fileInfo} [${fileSize}KB]"
                    ;;
@@ -1076,17 +1073,27 @@ UpdateDiversionWeeklyStatsFile()
 	ln -s "$diversionstatsfile" "$SCRIPT_WEB_DIR/DiversionStats.htm" 2>/dev/null
 }
 
-WriteStats_ToJS(){
-	sed -i -e '/}/d;/function/d;/document.getElementById/d;' "$2"
-	awk 'NF' "$2" > "$2.tmp"
-	mv "$2.tmp" "$2"
-	printf "\\r\\nfunction %s(){" "$3" >> "$2"
+##----------------------------------------##
+## Modified by Martinski W. [2024-Nov-15] ##
+##----------------------------------------##
+WriteStats_ToJS()
+{
+	if [ $# -lt 4 ] ; then return 1 ; fi
+
+	if [ -f "$2" ]
+	then
+	    sed -i -e '/}/d;/function/d;/document.getElementById/d;' "$2"
+	    awk 'NF' "$2" > "${2}.tmp"
+	    mv -f "${2}.tmp" "$2"
+	fi
+	printf "\nfunction %s(){\n" "$3" >> "$2"
 	html='document.getElementById("'"$4"'").innerHTML="'
-	while IFS='' read -r line || [ -n "$line" ]; do
-		html="${html}${line}"
+
+	while IFS='' read -r line || [ -n "$line" ]
+	do html="${html}${line}"
 	done < "$1"
 	html="$html"'"'
-	printf "%s;}\\r\\n" "$html" >> "$2"
+	printf "%s\n}\n" "$html" >> "$2"
 }
 
 ##----------------------------------------##
@@ -2108,21 +2115,26 @@ ScriptHeader(){
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Nov-01] ##
+## Modified by Martinski W. [2024-Nov-15] ##
 ##----------------------------------------##
 MainMenu()
 {
 	printf "WebUI for %s is available at:\n${SETTING}%s${CLEARFORMAT}\n\n" "$SCRIPT_NAME" "$(Get_WebUI_URL)"
 	printf "1.    Update Diversion Statistics (daily only)\n"
-	printf "      Database Size: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_GetFileSize_ "$DNS_DB" HRx)"
+	printf "      Database size: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_GetFileSize_ "$DNS_DB" HRx)"
 	printf "2.    Update Diversion Statistics (daily, weekly and monthly)\n"
 	printf "      WARNING: THIS MAY TAKE A WHILE (>5 minutes)\n\n"
 	printf "3.    Edit list of domains to exclude from %s statistics\n\n" "$SCRIPT_NAME"
-	printf "4.    Set number of recent DNS queries to show in WebUI\n      Currently: ${SETTING}%s queries will be shown${CLEARFORMAT}\n\n" "$(LastXQueries check)"
-	printf "5.    Set number of days data to keep in database\n      Currently: ${SETTING}%s days data will be kept${CLEARFORMAT}\n\n" "$(DaysToKeep check)"
-	printf "6.    Set the hour for daily cron job to trim the database\n      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
-	printf "q.    Toggle query mode\n      Currently ${SETTING}%s${CLEARFORMAT} query types will be logged\n\n" "$(QueryMode check)"
-	printf "c.    Toggle cache mode\n      Currently ${SETTING}%s${CLEARFORMAT} being used to cache query records\n\n" "$(CacheMode check)"
+	printf "4.    Set number of recent DNS queries to show in WebUI\n"
+	printf "      Currently: ${SETTING}%s queries will be shown${CLEARFORMAT}\n\n" "$(LastXQueries check)"
+	printf "5.    Set number of days data to keep in database\n"
+	printf "      Currently: ${SETTING}%s days data will be kept${CLEARFORMAT}\n\n" "$(DaysToKeep check)"
+	printf "6.    Set the hour for daily cron job to trim the database\n"
+	printf "      Currently: ${SETTING}%s [%s]${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ time24hr)" "$(_TrimDatabaseTime_ time12hr)"
+	printf "q.    Toggle query mode\n"
+	printf "      Currently: ${SETTING}%s${CLEARFORMAT} query types will be logged\n\n" "$(QueryMode check)"
+	printf "c.    Toggle cache mode\n"
+	printf "      Currently: ${SETTING}%s${CLEARFORMAT} being used to cache query records\n\n" "$(CacheMode check)"
 	printf "u.    Check for updates\n"
 	printf "uf.   Update %s with latest version (force update)\n\n" "$SCRIPT_NAME"
 	printf "r.    Reset %s database / delete all data\n\n" "$SCRIPT_NAME"
@@ -2310,15 +2322,15 @@ Check_Requirements(){
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2024-Nov-15] ##
 ##----------------------------------------##
 Menu_Install()
 {
 	ScriptHeader
-	Print_Output true "Welcome to $SCRIPT_NAME $SCRIPT_VERSION, a script by JackYaz"
+	Print_Output true "Welcome to $SCRIPT_NAME $SCRIPT_VERSION, a script by JackYaz" "$PASS"
 	sleep 1
 
-	Print_Output false "Checking your router meets the requirements for $SCRIPT_NAME"
+	Print_Output false "Checking if your router meets the requirements for $SCRIPT_NAME" "$PASS"
 
 	if ! Check_Requirements; then
 		Print_Output false "Requirements for $SCRIPT_NAME not met, please see above for the reason(s)" "$CRIT"
