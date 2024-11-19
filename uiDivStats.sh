@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Nov-15
+# Last Modified: 2024-Nov-18
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -924,21 +924,20 @@ LastXQueries()
 ##-------------------------------------##
 _GetFileSize_()
 {
-   local sizeType  fileSize  fileInfo
+   local sizeUnits  sizeInfo  fileSize
    if [ $# -eq 0 ] || [ -z "$1" ] || [ ! -s "$1" ]
    then echo 0; return 1 ; fi
 
-   if [ $# -eq 1 ] || [ -z "$2" ] || \
+   if [ $# -lt 2 ] || [ -z "$2" ] || \
       ! echo "$2" | grep -qE "^(B|KB|MB|GB|HR|HRx)$"
-   then sizeType="B" ; else sizeType="$2" ; fi
-   
+   then sizeUnits="B" ; else sizeUnits="$2" ; fi
+
    _GetNum_() { printf "%.1f" "$(echo "$1" | awk "{print $1}")" ; }
 
-   case "$sizeType" in
+   case "$sizeUnits" in
        B|KB|MB|GB)
            fileSize="$(ls -1l "$1" | awk -F ' ' '{print $3}')"
-           case "$sizeType" in
-                B) fileInfo="$fileSize" ;;
+           case "$sizeUnits" in
                KB) fileSize="$(_GetNum_ "($fileSize / $oneKByte)")" ;;
                MB) fileSize="$(_GetNum_ "($fileSize / $oneMByte)")" ;;
                GB) fileSize="$(_GetNum_ "($fileSize / $oneGByte)")" ;;
@@ -947,19 +946,19 @@ _GetFileSize_()
            ;;
        HR|HRx)
            fileSize="$(ls -1lh "$1" | awk -F ' ' '{print $3}')"
-           fileInfo="${fileSize}B"
-           if [ "$sizeType" = "HR" ]
-           then echo "$fileInfo" ; return 0 ; fi
-           sizeType="$(echo "$fileInfo" | tr -d '.0-9')"
-           case "$sizeType" in
+           sizeInfo="${fileSize}B"
+           if [ "$sizeUnits" = "HR" ]
+           then echo "$sizeInfo" ; return 0 ; fi
+           sizeUnits="$(echo "$sizeInfo" | tr -d '.0-9')"
+           case "$sizeUnits" in
                MB) fileSize="$(_GetFileSize_ "$1" KB)"
-                   fileInfo="${fileInfo} [${fileSize}KB]"
+                   sizeInfo="$sizeInfo [${fileSize}KB]"
                    ;;
                GB) fileSize="$(_GetFileSize_ "$1" MB)"
-                   fileInfo="${fileInfo} [${fileSize}MB]"
+                   sizeInfo="$sizeInfo [${fileSize}MB]"
                    ;;
            esac
-           echo "$fileInfo"
+           echo "$sizeInfo"
            ;;
        *) echo 0 ;;
    esac
@@ -1778,10 +1777,10 @@ Generate_Stats_From_SQLite()
 _ShowDatabaseFileInfo_()
 {
    [ ! -s "$1" ] && echo 0 && return 1
-   local fileSize  fileInfo
+   local fileSize  sizeInfo
    fileSize="$(ls -1lh "$1" | awk -F ' ' '{print $3}')"
-   fileInfo="$(ls -1l "$1" | awk -F ' ' '{print $3,$4,$5,$6,$7}')"
-   printf "[%sB] %s\n" "$fileSize" "$fileInfo"
+   sizeInfo="$(ls -1l "$1" | awk -F ' ' '{print $3,$4,$5,$6,$7}')"
+   printf "[%sB] %s\n" "$fileSize" "$sizeInfo"
 }
 
 _GetTrimLogTimeStamp_() { printf "[$(date +"$trimLogDateForm")]" ; }
