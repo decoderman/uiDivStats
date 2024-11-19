@@ -1,22 +1,30 @@
 #!/bin/sh
+# Last Modified: 2024-Nov-01 [Martinski W.]
+#-------------------------------------------
 # shellcheck disable=SC2039
 # shellcheck disable=SC3048
+#-------------------------------------------
 trap '' SIGHUP
 
-querymode="$(grep "QUERYMODE" /jffs/addons/uiDivStats.d/config | cut -f2 -d"=")"
+querymode="$(grep "^QUERYMODE=" /jffs/addons/uiDivStats.d/config | cut -f2 -d'=')"
 tailfilesuffix=""
 if [ "$querymode" = "A+AAAA" ] || [ "$querymode" = "A+AAAA+HTTPS" ]; then
 	tailfilesuffix="-a-aaaa"
 fi
 
 tailfile=""
-if grep -q "log-queries=extra" /etc/dnsmasq.conf ; then
-	tailfile="/jffs/addons/uiDivStats.d/taildns.d/dnsmasqtotalextra$tailfilesuffix.awk"
+if grep -q "^log-queries=extra" /etc/dnsmasq.conf ; then
+	tailfile="/jffs/addons/uiDivStats.d/taildns.d/dnsmasqtotalextra${tailfilesuffix}.awk"
 else
-	tailfile="/jffs/addons/uiDivStats.d/taildns.d/dnsmasqtotal$tailfilesuffix.awk"
+	tailfile="/jffs/addons/uiDivStats.d/taildns.d/dnsmasqtotal${tailfilesuffix}.awk"
 fi
 
 renice 15 $$
+
+[ ! -d /opt/share/tmp ] && mkdir -m 777 -p /opt/share/tmp
+TMPDIR="/opt/share/tmp"
+SQLITE_TMPDIR="$TMPDIR"
+export SQLITE_TMPDIR TMPDIR
 
 tail -F /opt/var/log/dnsmasq.log /opt/var/log/dnsmasq.log3 | awk -f "$tailfile" | \
 
@@ -27,8 +35,10 @@ reqdmn="$(echo "$line" | cut -f3 -d',')" \
 qrytype="$(echo "$line" | cut -f4 -d',')" \
 allowed="$(echo "$line" | cut -f5 -d',')" \
 
-echo "CREATE TABLE IF NOT EXISTS [dnsqueries] ([QueryID] INTEGER PRIMARY KEY NOT NULL, [Timestamp] NUMERIC NOT NULL, [SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL); \
-INSERT INTO dnsqueries ([Timestamp],[SrcIP],[ReqDmn],[QryType],[Allowed]) values($timestamp,\"$srcip\",\"$reqdmn\",\"$qrytype\",\"$allowed\");" > /opt/share/uiDivStats.d/dnsqueriestotal.sql \
+echo "PRAGMA temp_store=1; \
+CREATE TABLE IF NOT EXISTS [dnsqueries] ([QueryID] INTEGER PRIMARY KEY NOT NULL, [Timestamp] NUMERIC NOT NULL, [SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL); \
+INSERT INTO dnsqueries ([Timestamp],[SrcIP],[ReqDmn],[QryType],[Allowed]) values($timestamp,\"$srcip\",\"$reqdmn\",\"$qrytype\",\"$allowed\");" \
+> /opt/share/uiDivStats.d/dnsqueriestotal.sql \
 
 while ! /opt/bin/sqlite3 /opt/share/uiDivStats.d/dnsqueries.db < /opt/share/uiDivStats.d/dnsqueriestotal.sql >/dev/null 2>&1; do sleep 1; done \
 

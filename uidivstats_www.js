@@ -12,6 +12,11 @@ var sortname = 'Time';
 var sortdir = 'desc';
 var tout;
 
+/**-------------------------------------**/
+/** Added by Martinski W. [2024-Nov-01] **/
+/**-------------------------------------**/
+var sqlDatabaseFileSize = '0 Bytes';
+
 Chart.defaults.global.defaultFontColor = '#CCC';
 Chart.Tooltip.positioners.cursor = function(chartElements,coordinates){
 	return coordinates;
@@ -508,7 +513,8 @@ function LogarithmicFormatter(tickValue,index,ticks){
 	}
 };
 
-function GetCookie(cookiename,returntype){
+function GetCookie(cookiename,returntype)
+{
 	if(cookie.get('uidivstats_'+cookiename) != null){
 		return cookie.get('uidivstats_'+cookiename);
 	}
@@ -531,7 +537,11 @@ function SetCurrentPage(){
 	document.form.current_page.value = window.location.pathname.substring(1);
 }
 
-function initial(){
+/**----------------------------------------**/
+/** Modified by Martinski W. [2024-Nov-01] **/
+/**----------------------------------------**/
+function initial()
+{
 	SetCurrentPage();
 	LoadCustomSettings();
 	show_menu();
@@ -549,9 +559,14 @@ function initial(){
 	get_querylog_file();
 	get_DivStats_file();
 	ScriptUpdateLayout();
+	showhide('databaseSize_text',true);
 }
 
-function get_sqldata_file(){
+/**----------------------------------------**/
+/** Modified by Martinski W. [2024-Nov-01] **/
+/**----------------------------------------**/
+function get_sqldata_file()
+{
 	$.ajax({
 		url: '/ext/uiDivStats/SQLData.js',
 		dataType: 'script',
@@ -561,6 +576,7 @@ function get_sqldata_file(){
 		},
 		success: function(){
 			SetuiDivStatsTitle();
+			document.getElementById('databaseSize_text').innerHTML = 'Database Size: '+sqlDatabaseFileSize;
 			$('#uidivstats_div_keystats').append(BuildKeyStatsTableHtml('Key Stats','keystats'));
 			$('#keystats_Period').val(GetCookie('keystats_Period','number')).change();
 			get_clients_file();
@@ -598,19 +614,27 @@ function get_clients_file(){
 	});
 }
 
-function get_conf_file(){
+/**----------------------------------------**/
+/** Modified by Martinski W. [2024-Nov-01] **/
+/**----------------------------------------**/
+function get_conf_file()
+{
 	$.ajax({
 		url: '/ext/uiDivStats/config.htm',
 		dataType: 'text',
 		error: function(xhr){
 			setTimeout(get_conf_file,1000);
 		},
-		success: function(data){
-			var configdata=data.split('\n');
+		success: function(data)
+		{
+			var configdata = data.split('\n');
 			configdata = configdata.filter(Boolean);
-
-			for(var i = 0; i < configdata.length; i++){
-				eval('document.form.uidivstats_'+configdata[i].split('=')[0].toLowerCase()).value = configdata[i].split('=')[1].replace(/(\r\n|\n|\r)/gm,'');
+			for (var i = 0; i < configdata.length; i++)
+			{
+				if (configdata[i].match(/^QUERYMODE|^CACHEMODE|^DAYSTOKEEP|^LASTXQUERIES/) != null)
+				{
+				   eval('document.form.uidivstats_'+configdata[i].split('=')[0].toLowerCase()).value = configdata[i].split('=')[1].replace(/(\r\n|\n|\r)/gm,'');
+				}
 			}
 		}
 	});
@@ -673,6 +697,7 @@ function SetGlobalDataset(txtchartname,dataobject){
 		showhide('imgUpdateStats',false);
 		showhide('uidivstats_text',false);
 		showhide('btnUpdateStats',true);
+		showhide('databaseSize_text',true);
 		Assign_EventHandlers();
 	}
 }
@@ -838,8 +863,13 @@ function PostStatUpdate(){
 	setTimeout(RedrawAllCharts,3000);
 }
 
-function updateStats(){
+/**----------------------------------------**/
+/** Modified by Martinski W. [2024-Nov-01] **/
+/**----------------------------------------**/
+function updateStats()
+{
 	showhide('btnUpdateStats',false);
+	showhide('databaseSize_text',false);
 	document.formScriptActions.action_script.value='start_uiDivStats';
 	document.formScriptActions.submit();
 	showhide('imgUpdateStats',true);
