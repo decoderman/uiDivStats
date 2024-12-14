@@ -12,10 +12,12 @@ var sortname = 'Time';
 var sortdir = 'desc';
 var tout;
 
-/**-------------------------------------**/
-/** Added by Martinski W. [2024-Nov-01] **/
-/**-------------------------------------**/
+/**----------------------------------------**/
+/** Modified by Martinski W. [2024-Dec-14] **/
+/**----------------------------------------**/
 var sqlDatabaseFileSize = '0 Bytes';
+var tmpfsAvailableSpace = '0 Bytes';
+var backgroundProcsState = 'ENABLED';
 
 Chart.defaults.global.defaultFontColor = '#CCC';
 Chart.Tooltip.positioners.cursor = function(chartElements,coordinates){
@@ -538,7 +540,7 @@ function SetCurrentPage(){
 }
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Nov-01] **/
+/** Modified by Martinski W. [2024-Dec-13] **/
 /**----------------------------------------**/
 function initial()
 {
@@ -560,10 +562,12 @@ function initial()
 	get_DivStats_file();
 	ScriptUpdateLayout();
 	showhide('databaseSize_text',true);
+	showhide('tmpfsFreeSpace_text',true);
+	showhide('backProcStatus_text',true);
 }
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Nov-01] **/
+/** Modified by Martinski W. [2024-Dec-13] **/
 /**----------------------------------------**/
 function get_sqldata_file()
 {
@@ -574,9 +578,17 @@ function get_sqldata_file()
 		error: function(xhr){
 			setTimeout(get_sqldata_file,1000);
 		},
-		success: function(){
+		success: function()
+		{
+            var backgroundProcsStateStr;
 			SetuiDivStatsTitle();
 			document.getElementById('databaseSize_text').innerHTML = 'Database Size: '+sqlDatabaseFileSize;
+			document.getElementById('tmpfsFreeSpace_text').innerHTML = 'TMPFS free space: '+tmpfsAvailableSpace;
+			if (backgroundProcsState === 'ENABLED')
+			{ backgroundProcsStateStr = "<span style='margin-left:8px; background-color: #229652; color:#f2f2f2;'>&nbsp; ENABLED &nbsp;</span>" }
+			else
+			{ backgroundProcsStateStr = "<span style='margin-left:8px; background-color: #C81927; color:#f2f2f2;'>&nbsp; DISABLED &nbsp;</span>" }
+			document.getElementById('backProcStatus_text').innerHTML = 'Currently: '+backgroundProcsStateStr;
 			$('#uidivstats_div_keystats').append(BuildKeyStatsTableHtml('Key Stats','keystats'));
 			$('#keystats_Period').val(GetCookie('keystats_Period','number')).change();
 			get_clients_file();
