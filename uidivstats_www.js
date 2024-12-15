@@ -13,8 +13,9 @@ var sortdir = 'desc';
 var tout;
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Dec-14] **/
+/** Modified by Martinski W. [2024-Dec-15] **/
 /**----------------------------------------**/
+var ramAvailableSpace = '0 Bytes';
 var sqlDatabaseFileSize = '0 Bytes';
 var tmpfsAvailableSpace = '0 Bytes';
 var backgroundProcsState = 'ENABLED';
@@ -567,7 +568,7 @@ function initial()
 }
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Dec-13] **/
+/** Modified by Martinski W. [2024-Dec-15] **/
 /**----------------------------------------**/
 function get_sqldata_file()
 {
@@ -583,7 +584,8 @@ function get_sqldata_file()
             var backgroundProcsStateStr;
 			SetuiDivStatsTitle();
 			document.getElementById('databaseSize_text').innerHTML = 'Database Size: '+sqlDatabaseFileSize;
-			document.getElementById('tmpfsFreeSpace_text').innerHTML = 'TMPFS free space: '+tmpfsAvailableSpace;
+			document.getElementById('tmpfsFreeSpace_text').innerHTML = 'TMPFS Available: '+tmpfsAvailableSpace+
+			                                                           '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM Available: '+ramAvailableSpace;
 			if (backgroundProcsState === 'ENABLED')
 			{ backgroundProcsStateStr = "<span style='margin-left:8px; background-color: #229652; color:#f2f2f2;'>&nbsp; ENABLED &nbsp;</span>" }
 			else
@@ -738,7 +740,8 @@ function SetClients(txtchartname){
 	}
 }
 
-function ScriptUpdateLayout(){
+function ScriptUpdateLayout()
+{
 	var localver = GetVersionNumber('local');
 	var serverver = GetVersionNumber('server');
 	$('#uidivstats_version_local').text(localver);
@@ -751,7 +754,8 @@ function ScriptUpdateLayout(){
 	}
 }
 
-function update_status(){
+function update_status()
+{
 	$.ajax({
 		url: '/ext/uiDivStats/detect_update.js',
 		dataType: 'script',
@@ -781,7 +785,8 @@ function update_status(){
 	});
 }
 
-function CheckUpdate(){
+function CheckUpdate()
+{
 	showhide('btnChkUpdate',false);
 	document.formScriptActions.action_script.value='start_uiDivStatscheckupdate';
 	document.formScriptActions.submit();
@@ -789,15 +794,21 @@ function CheckUpdate(){
 	setTimeout(update_status,2000);
 }
 
-function DoUpdate(){
+/**----------------------------------------**/
+/** Modified by Martinski W. [2024-Dec-15] **/
+/**----------------------------------------**/
+function DoUpdate()
+{
 	document.form.action_script.value = 'start_uiDivStatsdoupdate';
 	document.form.action_wait.value = 10;
 	showLoading();
 	document.form.submit();
+    setTimeout(get_sqldata_file,4000);
 }
 
-function SaveConfig(){
-	if(Validate_All()){
+function SaveConfig()
+{
+	if (Validate_All()){
 		document.getElementById('amng_custom').value = JSON.stringify($('form').serializeObject());
 		document.form.action_script.value = 'start_uiDivStatsconfig';
 		document.form.action_wait.value = 10;
@@ -853,17 +864,18 @@ function GetVersionNumber(versiontype){
 	}
 }
 
-function RedrawAllCharts(){
+function RedrawAllCharts()
+{
 	$('#td_charts').append(BuildChartHtml('DNS Queries','TotalBlockedtime','true','false'));
 	$('#td_charts').append(BuildChartHtml('Top blocked domains','Blocked','false','true'));
 	$('#td_charts').append(BuildChartHtml('Top requested domains','Total','false','true'));
 
 	get_sqldata_file();
-
 	Assign_EventHandlers();
 }
 
-function PostStatUpdate(){
+function PostStatUpdate()
+{
 	currentNoChartsBlocked = 0;
 	currentNoChartsTotal = 0;
 	currentNoChartsTotalBlocked = 0;
@@ -895,7 +907,8 @@ function StartUpdateStatsInterval(){
 }
 
 var statcount=2;
-function update_uidivstats(){
+function update_uidivstats()
+{
 	statcount++;
 	$.ajax({
 		url: '/ext/uiDivStats/detect_uidivstats.js',

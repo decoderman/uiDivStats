@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Dec-14
+# Last Modified: 2024-Dec-15
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -32,7 +32,7 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.4"
+readonly SCRIPT_VERSION="v4.0.5"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -679,7 +679,7 @@ Auto_Cron()
 				STARTUPLINECOUNTTRIM="$(cru l | grep -c "${SCRIPT_NAME}_trim")"
 			fi
 
-			STARTUPLINECOUNTEXQUERYLOG="$(cru l | grep "${SCRIPT_NAME}_querylog" | grep -c '^[*]/3 [*] ')"
+			STARTUPLINECOUNTEXQUERYLOG="$(cru l | grep "${SCRIPT_NAME}_querylog" | grep -c '^[*]/2 [*] ')"
 			if [ "$STARTUPLINECOUNTQUERYLOG" -ne 0 ] && [ "$STARTUPLINECOUNTEXQUERYLOG" -eq 0 ]
 			then
 				cru d "${SCRIPT_NAME}_querylog"
@@ -700,7 +700,7 @@ Auto_Cron()
 				cru a "${SCRIPT_NAME}_trim" "$defTrimDB_Mins $(_TrimDatabaseTime_ hour) * * * /jffs/scripts/$SCRIPT_NAME trimdb"
 			fi
 			if [ "$STARTUPLINECOUNTQUERYLOG" -eq 0 ]; then
-				cru a "${SCRIPT_NAME}_querylog" "*/3 * * * * /jffs/scripts/$SCRIPT_NAME querylog"
+				cru a "${SCRIPT_NAME}_querylog" "*/2 * * * * /jffs/scripts/$SCRIPT_NAME querylog"
 			fi
 			if [ "$STARTUPLINECOUNTFLUSHTODB" -eq 0 ]; then
 				cru a "${SCRIPT_NAME}_flushtodb" "4-59/5 * * * * /jffs/scripts/$SCRIPT_NAME flushtodb"
@@ -1211,6 +1211,64 @@ _Get_TMPFS_Space_()
 }
 
 ##-------------------------------------##
+## Added by Martinski W. [2024-Dec-14] ##
+##-------------------------------------##
+_GetAvailableRAM_()
+{
+   local theMemTotal  theMemFree1  theMemAvail
+   local theMemCache  theMemBuffr  theMemAvailHR
+   local theMemInfoStr  percentNum  memInfoType
+
+   _GetNum_() { printf "%.1f" "$(echo "$1" | awk "{print $1}")" ; }
+
+   if [ $# -lt 1 ] || [ -z "$1" ] || \
+      ! echo "$1" | grep -qE "^(HR|HRx)$"
+   then memInfoType="HR" ; else memInfoType="$1" ; fi
+
+   theMemInfoStr="$(head -n 8 /proc/meminfo)"
+   theMemTotal="$(echo "$theMemInfoStr" | awk -F ' ' '/^MemTotal:/{print $2}')"
+   theMemFree1="$(echo "$theMemInfoStr" | awk -F ' ' '/^MemFree:/{print $2}')"
+   theMemAvail="$(echo "$theMemInfoStr" | awk -F ' ' '/^MemAvailable:/{print $2}')"
+   if [ -z "$theMemAvail" ]
+   then
+       theMemCache="$(echo "$theMemInfoStr" | awk -F ' ' '/^Cached:/{print $2}')"
+       theMemBuffr="$(echo "$theMemInfoStr" | awk -F ' ' '/^Buffers:/{print $2}')"
+       theMemAvail="$((theMemFree1 + theMemCache + theMemBuffr))"
+   fi
+
+   if [ "$theMemAvail" -ge "$oneMByte" ]
+   then theMemAvailHR="$(_GetNum_ "($theMemAvail / $oneMByte)")GB"
+   elif [ "$theMemAvail" -ge "$oneKByte" ]
+   then theMemAvailHR="$(_GetNum_ "($theMemAvail / $oneKByte)")MB"
+   else theMemAvailHR="${theMemAvail}.0KB"
+   fi
+   if [ "$memInfoType" = "HRx" ]
+   then
+       percentNum="$(_GetNum_ "($theMemAvail * 100 / $theMemTotal)")"
+       theMemAvailHR="${theMemAvailHR} [${percentNum}%]"
+   fi
+   echo "${theMemAvailHR}"
+}
+
+##-------------------------------------##
+## Added by Martinski W. [2024-Dec-14] ##
+##-------------------------------------##
+_UpdateRAM_FreeSpaceInfo_()
+{
+   local ramFreeSpace
+   local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
+
+   ramFreeSpace="$(_GetAvailableRAM_ HRx)"
+   if [ ! -s "$outJSfile" ] || \
+      ! grep -q "^var ramAvailableSpace =.*" "$outJSfile"
+   then
+       sed -i "1 i var ramAvailableSpace = '${ramFreeSpace}';" "$outJSfile"
+   else
+       sed -i "s/^var ramAvailableSpace =.*/var ramAvailableSpace = '${ramFreeSpace}';/" "$outJSfile"
+   fi
+}
+
+##-------------------------------------##
 ## Added by Martinski W. [2024-Dec-13] ##
 ##-------------------------------------##
 _UpdateTMPFS_FreeSpaceInfo_()
@@ -1218,11 +1276,11 @@ _UpdateTMPFS_FreeSpaceInfo_()
    local tmpfsFreeSpace
    local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
 
-   tmpfsFreeSpace="$(_Get_TMPFS_Space_ FREE HRx)"
+   tmpfsFreeSpace="$(_Get_TMPFS_Space_ FREE HR)"
    if [ ! -s "$outJSfile" ] || \
       ! grep -q "^var tmpfsAvailableSpace =.*" "$outJSfile"
    then
-       sed -i "1 i var tmpfsAvailableSpace = '${tmpfsFreeSpace}';" "$outJSfile"
+       sed -i "2 i var tmpfsAvailableSpace = '${tmpfsFreeSpace}';" "$outJSfile"
    else
        sed -i "s/^var tmpfsAvailableSpace =.*/var tmpfsAvailableSpace = '${tmpfsFreeSpace}';/" "$outJSfile"
    fi
@@ -1250,7 +1308,7 @@ _UpdateBackgroundProcsState_()
 }
 
 ##-------------------------------------##
-## Added by Martinski W. [2024-Nov-12] ##
+## Added by Martinski W. [2024-Dec-14] ##
 ##-------------------------------------##
 _UpdateDatabaseFileSizeInfo_()
 {
@@ -1265,6 +1323,7 @@ _UpdateDatabaseFileSizeInfo_()
    else
        WritePlainData_ToJS "$outJSfile" "sqlDatabaseFileSize,'${databaseFileSize}'"
    fi
+   _UpdateRAM_FreeSpaceInfo_
    _UpdateTMPFS_FreeSpaceInfo_
    _UpdateBackgroundProcsState_
 }
@@ -2444,12 +2503,12 @@ ScriptHeader()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2024-Dec-14] ##
 ##----------------------------------------##
 MainMenu()
 {
 	local statusBackProcsState  statusBackProcsColor  statusBackProcsWarning
-    local cacheModeStr  menuOpt
+    local cacheModeStr  menuOpt  tmpInfoStr  memInfoStr
 
 	_InvalidMenuOptionMsg_()
 	{
@@ -2494,7 +2553,9 @@ MainMenu()
 	printf "      Currently: ${SETTING}%s${CLEARFORMAT} being used to cache query records\n" "$cacheModeStr"
 	if [ "$cacheModeStr" = "none" ]
 	then printf "\n"
-	else printf "      Current TMPFS free space: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_Get_TMPFS_Space_ FREE HRx)"
+	else
+        tmpInfoStr="$(_Get_TMPFS_Space_ FREE HR)" ; memInfoStr="$(_GetAvailableRAM_ HRx)"
+        printf "      TMPFS Available: ${SETTING}%s${CLEARFORMAT}   RAM Available: ${SETTING}%s${CLEARFORMAT}\n\n" "$tmpInfoStr" "$memInfoStr"
 	fi
 	printf "u.    Check for updates\n"
 	printf "uf.   Update %s with latest version (force update)\n\n" "$SCRIPT_NAME"
