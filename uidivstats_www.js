@@ -581,7 +581,7 @@ function get_sqldata_file()
 		},
 		success: function()
 		{
-            var backgroundProcsStateStr;
+			var backgroundProcsStateStr;
 			SetuiDivStatsTitle();
 			document.getElementById('databaseSize_text').innerHTML = 'Database Size: '+sqlDatabaseFileSize;
 			document.getElementById('tmpfsFreeSpace_text').innerHTML = 'TMPFS Available: '+tmpfsAvailableSpace+
