@@ -12,15 +12,17 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Dec-15
+# Last Modified: 2024-Dec-21
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
+# shellcheck disable=SC1090
 # shellcheck disable=SC2009
 # shellcheck disable=SC2012
 # shellcheck disable=SC2016
 # shellcheck disable=SC2018
 # shellcheck disable=SC2019
+# shellcheck disable=SC2039
 # shellcheck disable=SC2059
 # shellcheck disable=SC2086
 # shellcheck disable=SC2155
@@ -32,7 +34,7 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.5"
+readonly SCRIPT_VERSION="v4.0.6"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -93,13 +95,13 @@ readonly CLEARct="\033[0m"
 # $1 = print to syslog, $2 = message to print, $3 = log level
 Print_Output()
 {
-    local prioStr  prioNum
-    if [ $# -gt 2 ] && [ -n "$3" ]
-    then prioStr="$3"
-    else prioStr="NOTICE"
-    fi
+	local prioStr  prioNum
+	if [ $# -gt 2 ] && [ -n "$3" ]
+	then prioStr="$3"
+	else prioStr="NOTICE"
+	fi
 	if [ "$1" = "true" ]
-    then
+	then
 		case "$prioStr" in
 		    "$CRIT") prioNum=2 ;;
 		     "$ERR") prioNum=3 ;;
@@ -307,10 +309,12 @@ Update_Version()
 		Set_Version_Custom_Settings local "$serverver"
 		Set_Version_Custom_Settings server "$serverver"
 		Clear_Lock
-		if [ -z "$2" ]; then
+		if [ $# -lt 2 ] || [ -z "$2" ]
+		then
 			PressEnter
 			exec "$0"
-		elif [ "$2" = "unattended" ]; then
+		elif [ "$2" = "unattended" ]
+		then
 			exec "$0" postupdate
 		fi
 		exit 0
@@ -350,7 +354,7 @@ Update_File()
 				/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 				sleep 3
 			fi
-			mv "$SCRIPT_DIR/taildns.d/S90taildns" /opt/etc/init.d/S90taildns
+			mv -f "$SCRIPT_DIR/taildns.d/S90taildns" /opt/etc/init.d/S90taildns
 			/opt/etc/init.d/S90taildns start >/dev/null 2>&1
 			rm -f "$SCRIPT_DIR/$1"
 			Print_Output true "New version of $1 downloaded" "$PASS"
@@ -366,7 +370,7 @@ Update_File()
 					/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 					sleep 3
 				fi
-				mv "$SCRIPT_DIR/taildns.d/S90taildns" /opt/etc/init.d/S90taildns
+				mv -f "$SCRIPT_DIR/taildns.d/S90taildns" /opt/etc/init.d/S90taildns
 				/opt/etc/init.d/S90taildns start >/dev/null 2>&1
 				rm -f "$SCRIPT_DIR/$1"
 				Print_Output true "New version of $1 downloaded" "$PASS"
@@ -398,6 +402,9 @@ Update_File()
 	fi
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-21] ##
+##----------------------------------------##
 Conf_FromSettings()
 {
 	SETTINGSFILE="/jffs/addons/custom_settings.txt"
@@ -413,7 +420,7 @@ Conf_FromSettings()
 			sed -i "s/uidivstats_//g;s/ /=/g" "$TMPFILE"
 			while IFS='' read -r line || [ -n "$line" ]
 			do
-				SETTINGNAME="$(echo "$line" | cut -f1 -d'=' | awk '{ print toupper($1) }')"
+				SETTINGNAME="$(echo "$line" | cut -f1 -d'=' | awk '{print toupper($1)}')"
 				SETTINGVALUE="$(echo "$line" | cut -f2 -d'=')"
 				if [ "$SETTINGNAME" = "DOMAINSTOEXCLUDE" ]
 				then
@@ -426,15 +433,17 @@ Conf_FromSettings()
 			done < "$TMPFILE"
 			grep 'uidivstats_version' "$SETTINGSFILE" > "$TMPFILE"
 			sed -i "\\~uidivstats_~d" "$SETTINGSFILE"
-			mv "$SETTINGSFILE" "${SETTINGSFILE}.bak"
+			mv -f "$SETTINGSFILE" "${SETTINGSFILE}.bak"
 			cat "${SETTINGSFILE}.bak" "$TMPFILE" > "$SETTINGSFILE"
 			rm -f "$TMPFILE"
 			rm -f "${SETTINGSFILE}.bak"
 
-			QueryMode "$(QueryMode check)"
-			sleep 3
-			CacheMode "$(CacheMode check)"
-
+			if diff "$SCRIPT_CONF" "${SCRIPT_CONF}.bak" | grep -q "QUERYMODE="
+			then QueryMode "$(QueryMode check)"
+			fi
+			if diff "$SCRIPT_CONF" "${SCRIPT_CONF}.bak" | grep -q "CACHEMODE="
+			then CacheMode "$(CacheMode check)"
+			fi
 			Print_Output true "Merge of updated settings from WebUI completed successfully" "$PASS"
 		else
 			Print_Output false "No updated settings from WebUI found, no merge into $SCRIPT_CONF necessary" "$PASS"
@@ -503,7 +512,7 @@ Create_Symlinks()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-02] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 Conf_Exists()
 {
@@ -526,7 +535,7 @@ Conf_Exists()
 			echo "LASTXQUERIES=5000" >> "$SCRIPT_CONF"
 		fi
 		if ! grep -q "^CACHEMODE=" "$SCRIPT_CONF"; then
-			echo "CACHEMODE=tmp" >> "$SCRIPT_CONF"
+			echo "CACHEMODE=none" >> "$SCRIPT_CONF"
 		fi
 		if ! grep -q "^QUERYMODE=" "$SCRIPT_CONF"; then
 			echo "QUERYMODE=all" >> "$SCRIPT_CONF"
@@ -537,7 +546,7 @@ Conf_Exists()
 		sed -i -e 's/^QUERYMODE=A+AAAA$/QUERYMODE=A+AAAA+HTTPS/g' "$SCRIPT_CONF"
 		return 0
 	else
-		{ echo "QUERYMODE=all"; echo "CACHEMODE=tmp"
+		{ echo "QUERYMODE=all"; echo "CACHEMODE=none"
 		  echo "DAYSTOKEEP=30"; echo "LASTXQUERIES=5000"
 		  echo "TRIMDB_HOUR=$defTrimDB_Hour"
 		  echo "BACKG_STATS_PROCS_ENABLED=true"
@@ -634,7 +643,7 @@ Auto_Startup()
 		delete)
 			if [ -f /jffs/scripts/services-start ]
 			then
-				STARTUPLINECOUNT=$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/services-start)
+				STARTUPLINECOUNT="$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/services-start)"
 
 				if [ "$STARTUPLINECOUNT" -gt 0 ]; then
 					sed -i -e '/# '"$SCRIPT_NAME"'/d' /jffs/scripts/services-start
@@ -642,7 +651,7 @@ Auto_Startup()
 			fi
 			if [ -f /jffs/scripts/post-mount ]
 			then
-				STARTUPLINECOUNT=$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/post-mount)
+				STARTUPLINECOUNT="$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/post-mount)"
 
 				if [ "$STARTUPLINECOUNT" -gt 0 ]; then
 					sed -i -e '/# '"$SCRIPT_NAME"'/d' /jffs/scripts/post-mount
@@ -849,7 +858,7 @@ Mount_WebUI()
 }
 
 ##-------------------------------------##
-## Added by Martinski W. [2024-Dec-13] ##
+## Added by Martinski W. [2024-Dec-15] ##
 ##-------------------------------------##
 _ToggleBackgroundProcsEnabled_()
 {
@@ -876,7 +885,7 @@ _ToggleBackgroundProcsEnabled_()
     fi
     if [ "$dbBackgProcsEnabled" = "true" ]
     then
-        printf "${REDct}**-WARNING-**${CLEARct}${BOLD}${WARN}\n"
+        printf "${CRIT} **-WARNING-** ${CLEARct}${BOLD}${WARN}\n"
         printf "This option disables the background processing of statistics\n"
         printf "generated from the domain ad-blocking performed by Diversion.\n"
         printf "While in a DISABLED state, the script can be executed but in a\n"
@@ -886,7 +895,7 @@ _ToggleBackgroundProcsEnabled_()
         then
             dbBackgProcsEnabled=false
             printf "Disabling background processing...\n"
-            sed -i 's/^BACKG_STATS_PROCS_ENABLED.*$/BACKG_STATS_PROCS_ENABLED=false/' "$SCRIPT_CONF"
+            sed -i 's/^BACKG_STATS_PROCS_ENABLED=.*$/BACKG_STATS_PROCS_ENABLED=false/' "$SCRIPT_CONF"
             /opt/etc/init.d/S90taildns stop >/dev/null 2>&1
             sleep 3
             Auto_Cron delete 2>/dev/null
@@ -902,7 +911,7 @@ _ToggleBackgroundProcsEnabled_()
     then
         dbBackgProcsEnabled=true
         printf "Enabling background processing...\n"
-        sed -i 's/^BACKG_STATS_PROCS_ENABLED.*$/BACKG_STATS_PROCS_ENABLED=true/' "$SCRIPT_CONF"
+        sed -i 's/^BACKG_STATS_PROCS_ENABLED=.*$/BACKG_STATS_PROCS_ENABLED=true/' "$SCRIPT_CONF"
         Auto_Cron create 2>/dev/null
         /opt/etc/init.d/S90taildns start >/dev/null 2>&1
         sleep 2
@@ -913,26 +922,32 @@ _ToggleBackgroundProcsEnabled_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-14] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 QueryMode()
 {
 	case "$1" in
 		all)
 			printf "Please wait..."
-			sed -i 's/^QUERYMODE.*$/QUERYMODE=all/' "$SCRIPT_CONF"
+			sed -i 's/^QUERYMODE=.*$/QUERYMODE=all/' "$SCRIPT_CONF"
 			/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 			sleep 3
-			"$dbBackgProcsEnabled" && \
-			/opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			if "$dbBackgProcsEnabled"
+			then
+			    /opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			    sleep 2
+			fi
 		;;
 		A+AAAA+HTTPS)
 			printf "Please wait..."
-			sed -i 's/^QUERYMODE.*$/QUERYMODE=A+AAAA+HTTPS/' "$SCRIPT_CONF"
+			sed -i 's/^QUERYMODE=.*$/QUERYMODE=A+AAAA+HTTPS/' "$SCRIPT_CONF"
 			/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 			sleep 3
-			"$dbBackgProcsEnabled" && \
-			/opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			if "$dbBackgProcsEnabled"
+			then
+			    /opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			    sleep 2
+			fi
 		;;
 		check)
 			QUERYMODE="$(grep "^QUERYMODE=" "$SCRIPT_CONF" | cut -f2 -d"=")"
@@ -942,37 +957,43 @@ QueryMode()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-14] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 CacheMode()
 {
 	case "$1" in
 		none)
 			printf "Please wait..."
-			sed -i 's/^CACHEMODE.*$/CACHEMODE=none/' "$SCRIPT_CONF"
+			sed -i 's/^CACHEMODE=.*$/CACHEMODE=none/' "$SCRIPT_CONF"
 			/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 			sleep 3
 			Flush_Cache_To_DB
-			"$dbBackgProcsEnabled" && \
-			/opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			if "$dbBackgProcsEnabled"
+			then
+			    /opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			    sleep 2
+			fi
 		;;
 		tmp)
 			printf "Please wait..."
-			sed -i 's/^CACHEMODE.*$/CACHEMODE=tmp/' "$SCRIPT_CONF"
+			sed -i 's/^CACHEMODE=.*$/CACHEMODE=tmp/' "$SCRIPT_CONF"
 			/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 			sleep 3
-			"$dbBackgProcsEnabled" && \
-			/opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			if "$dbBackgProcsEnabled"
+			then
+			    /opt/etc/init.d/S90taildns start >/dev/null 2>&1
+			    sleep 2
+			fi
 		;;
 		check)
 			CACHEMODE="$(grep "^CACHEMODE=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-			echo "${CACHEMODE:=tmp}"
+			echo "${CACHEMODE:=none}"
 		;;
 	esac
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-13] ##
+## Modified by Martinski W. [2024-Dec-15] ##
 ##----------------------------------------##
 DaysToKeep()
 {
@@ -984,11 +1005,11 @@ DaysToKeep()
 			do
 				ScriptHeader
 				printf "${BOLD}Current number of days to keep data: ${GRNct}${daysToKeep}${CLEARct}\n"
-				printf "\n${BOLD}Please enter the maximum number of days\nto keep data for [1-365] (e=Exit):${CLEARFORMAT}  "
+				printf "\n${BOLD}Please enter the maximum number of days\nto keep data for [5-365] (e=Exit):${CLEARFORMAT}  "
 				read -r daystokeep_choice
 				if [ -z "$daystokeep_choice" ] && \
 				   echo "$daysToKeep" | grep -qE "^([1-9][0-9]{0,2})$" && \
-				   [ "$daysToKeep" -gt 0 ] && [ "$daysToKeep" -le 365 ]
+				   [ "$daysToKeep" -ge 5 ] && [ "$daysToKeep" -le 365 ]
 				then
 					exitLoop=true
 					break
@@ -998,11 +1019,11 @@ DaysToKeep()
 					break
 				elif ! Validate_Number "$daystokeep_choice"
 				then
-					printf "\n${ERR}Please enter a valid number [1-365].${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a valid number [5-365].${CLEARFORMAT}\n"
 					PressEnter
-				elif [ "$daystokeep_choice" -lt 1 ] || [ "$daystokeep_choice" -gt 365 ]
+				elif [ "$daystokeep_choice" -lt 5 ] || [ "$daystokeep_choice" -gt 365 ]
 				then
-					printf "\n${ERR}Please enter a number between 1 and 365.${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a number between 5 and 365.${CLEARFORMAT}\n"
 					PressEnter
 				else
 					daysToKeep="$daystokeep_choice"
@@ -1015,7 +1036,7 @@ DaysToKeep()
 				echo ; return 1
 			else
 				DAYSTOKEEP="$daysToKeep"
-				sed -i 's/^DAYSTOKEEP.*$/DAYSTOKEEP='"$DAYSTOKEEP"'/' "$SCRIPT_CONF"
+				sed -i 's/^DAYSTOKEEP=.*$/DAYSTOKEEP='"$DAYSTOKEEP"'/' "$SCRIPT_CONF"
 				echo ; return 0
 			fi
 		;;
@@ -1027,7 +1048,7 @@ DaysToKeep()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-13] ##
+## Modified by Martinski W. [2024-Dec-15] ##
 ##----------------------------------------##
 LastXQueries()
 {
@@ -1035,7 +1056,6 @@ LastXQueries()
 		update)
 			lastXQueries="$(LastXQueries check)"
 			exitLoop=false
-			ScriptHeader
 			while true
 			do
 				ScriptHeader
@@ -1071,7 +1091,7 @@ LastXQueries()
 				echo ; return 1
 			else
 				LASTXQUERIES="$lastXQueries"
-				sed -i 's/^LASTXQUERIES.*$/LASTXQUERIES='"$LASTXQUERIES"'/' "$SCRIPT_CONF"
+				sed -i 's/^LASTXQUERIES=.*$/LASTXQUERIES='"$LASTXQUERIES"'/' "$SCRIPT_CONF"
 				Generate_Query_Log
 				echo ; return 0
 			fi
@@ -1257,6 +1277,7 @@ _UpdateRAM_FreeSpaceInfo_()
 {
    local ramFreeSpace
    local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
+   [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    ramFreeSpace="$(_GetAvailableRAM_ HRx)"
    if [ ! -s "$outJSfile" ] || \
@@ -1275,6 +1296,7 @@ _UpdateTMPFS_FreeSpaceInfo_()
 {
    local tmpfsFreeSpace
    local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
+   [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    tmpfsFreeSpace="$(_Get_TMPFS_Space_ FREE HR)"
    if [ ! -s "$outJSfile" ] || \
@@ -1293,6 +1315,7 @@ _UpdateBackgroundProcsState_()
 {
    local statusBackProcsState
    local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
+   [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    if "$(_ToggleBackgroundProcsEnabled_ check)"
    then statusBackProcsState="ENABLED"
@@ -1314,6 +1337,7 @@ _UpdateDatabaseFileSizeInfo_()
 {
    local databaseFileSize
    local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
+   [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    databaseFileSize="$(_GetFileSize_ "$DNS_DB" HRx)"
    if [ ! -s "$outJSfile" ] || \
@@ -1348,7 +1372,7 @@ _ValidateCronJobMins_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-06] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 #----------------------------------------------------------
 # NOTE: The cron job MINUTES should *NOT* be modified
@@ -1395,7 +1419,8 @@ _TrimDatabaseTime_()
                if [ "$trimDBhour" -ne "$TRIMDB_HOUR" ]
                then
                    TRIMDB_HOUR="$trimDBhour"
-                   sed -i 's/^TRIMDB_HOUR.*$/TRIMDB_HOUR='"$TRIMDB_HOUR"'/' "$SCRIPT_CONF"
+                   sed -i 's/^TRIMDB_HOUR=.*$/TRIMDB_HOUR='"$TRIMDB_HOUR"'/' "$SCRIPT_CONF"
+                   "$(_ToggleBackgroundProcsEnabled_ check)" && \
                    cru a "${SCRIPT_NAME}_trim" "$defTrimDB_Mins $TRIMDB_HOUR * * * /jffs/scripts/$SCRIPT_NAME trimdb"
                fi
                echo ; return 0
@@ -2149,7 +2174,7 @@ _ApplyDatabaseSQLCmds_()
     fi
     if "$foundError" || "$foundLocked"
     then
-        Print_Output true "SQLite process ${resultStr}." "$CRIT"
+        Print_Output true "SQLite process ${resultStr}" "$ERR"
     fi
 }
 
@@ -2391,8 +2416,14 @@ Reset_DB()
 	Print_Output true "Database reset complete" "$WARN"
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-21] ##
+##----------------------------------------##
 Process_Upgrade()
 {
+	if [ $# -gt 0 ] && [ "$1" = "postupdate" ]
+	then _UpdateDatabaseFileSizeInfo_ ; fi
+
 	if [ -f "$SCRIPT_DIR/.upgraded" ] || [ -f "$SCRIPT_DIR/.upgraded2" ] || [ -f "$SCRIPT_DIR/.upgraded3" ]
 	then
 		Print_Output true "Unable to upgrade from older versions than 3.0.0" "$CRIT"
@@ -2409,6 +2440,9 @@ Process_Upgrade()
 	fi
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-21] ##
+##----------------------------------------##
 Migrate_Old_Data()
 {
 	if [ -f "${DNS_DB}.old" ]
@@ -2430,15 +2464,17 @@ Migrate_Old_Data()
 		rm -f "${DNS_DB}.old"
 
 		Print_Output true "Data migration complete" "$PASS"
-		Auto_Cron create 2>/dev/null
+		"$dbBackgProcsEnabled" && Auto_Cron create 2>/dev/null
 		renice 0 $$
 	fi
 }
 
-Shortcut_Script(){
+Shortcut_Script()
+{
 	case $1 in
 		create)
-			if [ -d /opt/bin ] && [ ! -f "/opt/bin/$SCRIPT_NAME" ] && [ -f "/jffs/scripts/$SCRIPT_NAME" ]; then
+			if [ -d /opt/bin ] && [ ! -f "/opt/bin/$SCRIPT_NAME" ] && [ -f "/jffs/scripts/$SCRIPT_NAME" ]
+			then
 				ln -s "/jffs/scripts/$SCRIPT_NAME" /opt/bin
 				chmod 0755 "/opt/bin/$SCRIPT_NAME"
 			fi
@@ -2494,7 +2530,7 @@ ScriptHeader()
 	printf "${BOLD}##   | |_| || || |__| || | \ V /  ____) || |_| (_| || |_ \__ \   ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##    \__,_||_||_____/ |_|  \_/  |_____/  \__|\__,_| \__||___/   ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
-	printf "${BOLD}##                     %s on %-18s              ##${CLEARFORMAT}\\n" "$SCRIPT_VERSION" "$ROUTER_MODEL"
+	printf "${BOLD}##                     %s on %-18s              ##${CLEARFORMAT}\n" "$SCRIPT_VERSION" "$ROUTER_MODEL"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##              https://github.com/jackyaz/uiDivStats            ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
@@ -2503,12 +2539,12 @@ ScriptHeader()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-14] ##
+## Modified by Martinski W. [2024-Dec-15] ##
 ##----------------------------------------##
 MainMenu()
 {
-	local statusBackProcsState  statusBackProcsColor  statusBackProcsWarning
-    local cacheModeStr  menuOpt  tmpInfoStr  memInfoStr
+	local statusBackProcsState  statusBackProcsWarning
+    local cacheModeStr  menuOption  tmpInfoStr  memInfoStr
 
 	_InvalidMenuOptionMsg_()
 	{
@@ -2519,13 +2555,11 @@ MainMenu()
 
 	if "$(_ToggleBackgroundProcsEnabled_ check)"
 	then
-	    statusBackProcsColor="$GRNct"
-	    statusBackProcsState="ENABLED"
+	    statusBackProcsState="${GRNct}ENABLED${CLEARFORMAT}"
 	    statusBackProcsWarning=""
 	else
-	    statusBackProcsColor="$REDct"
-	    statusBackProcsState="DISABLED"
-	    statusBackProcsWarning="${WARN} <<--- *WARNING*"
+	    statusBackProcsState="${CRIT} DISABLED ${CLEARct}"
+	    statusBackProcsWarning="${BOLD}${WARN} <<--- *WARNING*"
 	fi
 
 	if [ "$(CacheMode check)" = "none" ]
@@ -2546,7 +2580,7 @@ MainMenu()
 	printf "6.    Set the hour for daily cron job to trim the database\n"
 	printf "      Currently: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ timeHRx)"
 	printf "p.    Toggle background processing of Diversion statistics\n"
-	printf "      Currently: ${statusBackProcsColor}%s  ${statusBackProcsWarning}${CLEARFORMAT}\n\n" "$statusBackProcsState"
+	printf "      Currently: ${statusBackProcsState} ${statusBackProcsWarning}${CLEARFORMAT}\n\n"
 	printf "q.    Toggle query mode\n"
 	printf "      Currently: ${SETTING}%s${CLEARFORMAT} query types will be logged\n\n" "$(QueryMode check)"
 	printf "c.    Toggle cache mode\n"
@@ -2568,8 +2602,8 @@ MainMenu()
 
 	while true
 	do
-		printf "Choose an option:  " ; read -r menuOpt
-		case "$menuOpt" in
+		printf "Choose an option:  " ; read -r menuOption
+		case "$menuOption" in
 			1)
 				printf "\n"
 				if Check_Lock menu; then
@@ -2617,21 +2651,22 @@ MainMenu()
 				    _ToggleBackgroundProcsEnabled_
 				    Clear_Lock
 				    if "$dbBackgProcsEnabled" && \
-				       [ "$statusBackProcsState" = "DISABLED" ]
+				       echo "$statusBackProcsState" | grep -q "DISABLED"
 				    then
 				        PressEnter ; exec "$0" ; exit 0
 				    fi
+				    PressEnter
 				fi
-				PressEnter
 				break
 			;;
 			q)
 				printf "\n"
-				if Check_Lock menu; then
-					if [ "$(QueryMode check)" = "all" ]; then
-						QueryMode "A+AAAA+HTTPS"
-					elif [ "$(QueryMode check)" = "A+AAAA+HTTPS" ]; then
-						QueryMode all
+				if Check_Lock menu
+				then
+					if [ "$(QueryMode check)" = "all" ]
+					then QueryMode "A+AAAA+HTTPS"
+					elif [ "$(QueryMode check)" = "A+AAAA+HTTPS" ]
+					then QueryMode all
 					fi
 					Clear_Lock
 				fi
@@ -2639,11 +2674,12 @@ MainMenu()
 			;;
 			c)
 				printf "\n"
-				if Check_Lock menu; then
-					if [ "$(CacheMode check)" = "none" ]; then
-						CacheMode tmp
-					elif [ "$(CacheMode check)" = "tmp" ]; then
-						CacheMode none
+				if Check_Lock menu
+				then
+					if [ "$(CacheMode check)" = "none" ]
+					then CacheMode tmp
+					elif [ "$(CacheMode check)" = "tmp" ]
+					then CacheMode none
 					fi
 					Clear_Lock
 				fi
@@ -2698,7 +2734,7 @@ MainMenu()
 				break
 			;;
 			*)
-				_InvalidMenuOptionMsg_ "$menuOpt"
+				_InvalidMenuOptionMsg_ "$menuOption"
 				PressEnter
 				break
 			;;
@@ -2762,7 +2798,7 @@ Check_Requirements()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 Menu_Install()
 {
@@ -2825,10 +2861,15 @@ Menu_Install()
 
 	Auto_Startup create 2>/dev/null
 	Auto_DNSMASQ_Postconf create 2>/dev/null
-	Auto_Cron create 2>/dev/null
 	Auto_ServiceEvent create 2>/dev/null
 	Shortcut_Script create
-	/opt/etc/init.d/S90taildns start >/dev/null 2>&1
+
+	if "$(_ToggleBackgroundProcsEnabled_ check)"
+	then
+		Auto_Cron create 2>/dev/null
+		/opt/etc/init.d/S90taildns start >/dev/null 2>&1
+		sleep 2
+	fi
 
 	dig +short +answer snbforums.com '@'"$(nvram get lan_ipaddr)" >/dev/null 2>&1
 	sleep 1
@@ -2848,7 +2889,7 @@ Menu_Install()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 Menu_Startup()
 {
@@ -2878,12 +2919,16 @@ Menu_Startup()
 	fi
 
 	Check_Lock
-	if [ "$1" != "force" ]; then
-		sleep 20
-	fi
+	[ "$1" != "force" ] && sleep 20
 	Auto_Startup create 2>/dev/null
 	Auto_DNSMASQ_Postconf create 2>/dev/null
-	"$dbBackgProcsEnabled" && Auto_Cron create 2>/dev/null
+	if "$dbBackgProcsEnabled"
+	then
+		Auto_Cron create 2>/dev/null
+	else
+		Auto_Cron delete 2>/dev/null
+		/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
+	fi
 	Auto_ServiceEvent create 2>/dev/null
 	Shortcut_Script create
 	Mount_WebUI
@@ -3137,12 +3182,12 @@ Entware_Ready()
 
 		while [ ! -f /opt/bin/opkg ] && [ "$sleepTimerSecs" -lt "$maxSleepTimer" ]
 		do
-            if [ "$((sleepTimerSecs % 10))" -eq 0 ]
-		    then
+			if [ "$((sleepTimerSecs % 10))" -eq 0 ]
+			then
 			    Print_Output true "Entware NOT found, sleeping for $theSleepDelay secs [$sleepTimerSecs secs]..." "$WARN"
-            fi
+			fi
 			sleep "$theSleepDelay"
-            sleepTimerSecs="$((sleepTimerSecs + theSleepDelay))"
+			sleepTimerSecs="$((sleepTimerSecs + theSleepDelay))"
 		done
 		if [ ! -f /opt/bin/opkg ]
 		then
@@ -3216,7 +3261,7 @@ export SQLITE_TMPDIR TMPDIR
 dbBackgProcsEnabled="$(_ToggleBackgroundProcsEnabled_ check)"
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 if [ $# -eq 0 ] || [ -z "$1" ]
 then
@@ -3228,12 +3273,18 @@ then
 
 	if [ -f "$SCRIPT_DIR/SQLData.js" ] && [ -d "$SCRIPT_USB_DIR" ]
     then
-		mv "$SCRIPT_DIR/SQLData.js" "$SCRIPT_USB_DIR/SQLData.js"
+		mv -f "$SCRIPT_DIR/SQLData.js" "$SCRIPT_USB_DIR/SQLData.js"
 	fi
 	"$dbBackgProcsEnabled" && Process_Upgrade
 	Auto_Startup create 2>/dev/null
 	Auto_DNSMASQ_Postconf create 2>/dev/null
-	"$dbBackgProcsEnabled" && Auto_Cron create 2>/dev/null
+	if "$dbBackgProcsEnabled"
+	then
+		Auto_Cron create 2>/dev/null
+	else
+		Auto_Cron delete 2>/dev/null
+		/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
+	fi
 	Auto_ServiceEvent create 2>/dev/null
 	Shortcut_Script create
 	ScriptHeader
@@ -3242,7 +3293,7 @@ then
 fi
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
 case "$1" in
 	install)
@@ -3269,23 +3320,23 @@ case "$1" in
 		exit 0
 	;;
 	service_event)
-		if [ "$2" = "start" ] && [ "$3" = "$SCRIPT_NAME" ]; then
+		if [ "$2" = "start" ] && [ "$3" = "$SCRIPT_NAME" ]
+		then
 			rm -f /tmp/detect_uidivstats.js
 			Check_Lock webui
 			Menu_GenerateStats
-			exit 0
-		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}querylog" ]; then
+		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}querylog" ]
+		then
 			Generate_Query_Log
-			exit 0
-		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}config" ]; then
+		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}config" ]
+		then
 			Conf_FromSettings
-			exit 0
-		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}checkupdate" ]; then
+		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}checkupdate" ]
+		then
 			Update_Check
-			exit 0
-		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}doupdate" ]; then
+		elif [ "$2" = "start" ] && [ "$3" = "${SCRIPT_NAME}doupdate" ]
+		then
 			Update_Version force unattended
-			exit 0
 		fi
 		exit 0
 	;;
@@ -3324,6 +3375,7 @@ case "$1" in
 		exit 0
 	;;
 	enableprocs)
+		Entware_Ready
 		Check_Lock
 		_ToggleBackgroundProcsEnabled_ enable
 		Clear_Lock
@@ -3357,14 +3409,20 @@ case "$1" in
 	postupdate)
 		Create_Dirs
 		if [ -f "$SCRIPT_DIR/SQLData.js" ]; then
-			mv "$SCRIPT_DIR/SQLData.js" "$SCRIPT_USB_DIR/SQLData.js"
+			mv -f "$SCRIPT_DIR/SQLData.js" "$SCRIPT_USB_DIR/SQLData.js"
 		fi
 		Conf_Exists
 		Create_Symlinks
-		Process_Upgrade
+		Process_Upgrade postupdate
 		Auto_Startup create 2>/dev/null
 		Auto_DNSMASQ_Postconf create 2>/dev/null
-		Auto_Cron create 2>/dev/null
+		if "$dbBackgProcsEnabled"
+		then
+			Auto_Cron create 2>/dev/null
+		else
+			Auto_Cron delete 2>/dev/null
+			/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
+		fi
 		Auto_ServiceEvent create 2>/dev/null
 		Shortcut_Script create
 	;;
@@ -3402,7 +3460,7 @@ case "$1" in
 	;;
 	*)
 		ScriptHeader
-		Print_Output false "Command not recognised." "$ERR"
+		Print_Output false "Parameter [$*] is NOT recognised." "$ERR"
 		Print_Output false "For a list of available commands run: $SCRIPT_NAME help" "$SETTING"
 		exit 1
 	;;
