@@ -13,7 +13,7 @@ var sortdir = 'desc';
 var tout;
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Dec-15] **/
+/** Modified by Martinski W. [2024-Dec-22] **/
 /**----------------------------------------**/
 var ramAvailableSpace = '0 Bytes';
 var sqlDatabaseFileSize = '0 Bytes';
@@ -568,7 +568,7 @@ function initial()
 }
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Dec-15] **/
+/** Modified by Martinski W. [2024-Dec-22] **/
 /**----------------------------------------**/
 function get_sqldata_file()
 {
@@ -583,13 +583,13 @@ function get_sqldata_file()
 		{
 			var backgroundProcsStateStr;
 			SetuiDivStatsTitle();
-			document.getElementById('databaseSize_text').innerHTML = 'Database Size: '+sqlDatabaseFileSize;
+			document.getElementById('databaseSize_text').textContent = 'Database Size: '+sqlDatabaseFileSize;
 			document.getElementById('tmpfsFreeSpace_text').innerHTML = 'TMPFS Available: '+tmpfsAvailableSpace+
-			                                                           '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM Available: '+ramAvailableSpace;
+			                                                           '<span style="padding-left:25px;">RAM Available: '+ramAvailableSpace+'</span>';
 			if (backgroundProcsState === 'ENABLED')
-			{ backgroundProcsStateStr = "<span style='margin-left:8px; background-color: #229652; color:#f2f2f2;'>&nbsp; ENABLED &nbsp;</span>" }
+			{ backgroundProcsStateStr = '<span style="margin-left:8px; background-color:#229652; color:#f2f2f2;">&nbsp;ENABLED&nbsp;</span>' ; }
 			else
-			{ backgroundProcsStateStr = "<span style='margin-left:8px; background-color: #C81927; color:#f2f2f2;'>&nbsp; DISABLED &nbsp;</span>" }
+			{ backgroundProcsStateStr = '<span style="margin-left:8px; background-color:#C81927; color:#f2f2f2;">&nbsp;DISABLED&nbsp;</span>' ; }
 			document.getElementById('backProcStatus_text').innerHTML = 'Currently: '+backgroundProcsStateStr;
 			$('#uidivstats_div_keystats').append(BuildKeyStatsTableHtml('Key Stats','keystats'));
 			$('#keystats_Period').val(GetCookie('keystats_Period','number')).change();
