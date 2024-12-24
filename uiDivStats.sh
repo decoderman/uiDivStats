@@ -2144,7 +2144,7 @@ _GetTrimLogTimeStamp_() { printf "[$(date +"$trimLogDateForm")]" ; }
 _ApplyDatabaseSQLCmds_()
 {
     local errorCount=0  maxErrorCount=5
-    local triesCount=0  maxTriesCount=20  sqlErrorMsg
+    local triesCount=0  maxTriesCount=25  sqlErrorMsg
     local tempLogFilePath="/tmp/uiDivStats_TMP_$$.LOG"
 
     resultStr=""
@@ -2191,7 +2191,7 @@ _ApplyDatabaseSQLCmds_()
 _ApplyDatabaseSQLCmdsForTrim_()
 {
     local errorCount=0  maxErrorCount=5
-    local triesCount=0  maxTriesCount=20  sqlErrorMsg
+    local triesCount=0  maxTriesCount=25  sqlErrorMsg
 
     resultStr=""
     foundError=false ; foundLocked=false
