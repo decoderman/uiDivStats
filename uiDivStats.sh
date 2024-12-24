@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Dec-21
+# Last Modified: 2024-Dec-23
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -34,7 +34,7 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.6"
+readonly SCRIPT_VERSION="v4.0.7"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -1270,9 +1270,9 @@ _GetAvailableRAM_()
    echo "${theMemAvailHR}"
 }
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Dec-14] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-23] ##
+##----------------------------------------##
 _UpdateRAM_FreeSpaceInfo_()
 {
    local ramFreeSpace
@@ -1280,8 +1280,10 @@ _UpdateRAM_FreeSpaceInfo_()
    [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    ramFreeSpace="$(_GetAvailableRAM_ HRx)"
-   if [ ! -s "$outJSfile" ] || \
-      ! grep -q "^var ramAvailableSpace =.*" "$outJSfile"
+   if [ ! -s "$outJSfile" ]
+   then
+       echo "var ramAvailableSpace = '${ramFreeSpace}';" >> "$outJSfile"
+   elif ! grep -q "^var ramAvailableSpace =.*" "$outJSfile"
    then
        sed -i "1 i var ramAvailableSpace = '${ramFreeSpace}';" "$outJSfile"
    else
@@ -1289,9 +1291,9 @@ _UpdateRAM_FreeSpaceInfo_()
    fi
 }
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Dec-13] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-23] ##
+##----------------------------------------##
 _UpdateTMPFS_FreeSpaceInfo_()
 {
    local tmpfsFreeSpace
@@ -1299,8 +1301,10 @@ _UpdateTMPFS_FreeSpaceInfo_()
    [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    tmpfsFreeSpace="$(_Get_TMPFS_Space_ FREE HR)"
-   if [ ! -s "$outJSfile" ] || \
-      ! grep -q "^var tmpfsAvailableSpace =.*" "$outJSfile"
+   if [ ! -s "$outJSfile" ]
+   then
+       echo "var tmpfsAvailableSpace = '${tmpfsFreeSpace}';" >> "$outJSfile"
+   elif ! grep -q "^var tmpfsAvailableSpace =.*" "$outJSfile"
    then
        sed -i "2 i var tmpfsAvailableSpace = '${tmpfsFreeSpace}';" "$outJSfile"
    else
@@ -1308,9 +1312,9 @@ _UpdateTMPFS_FreeSpaceInfo_()
    fi
 }
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Dec-13] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-23] ##
+##----------------------------------------##
 _UpdateBackgroundProcsState_()
 {
    local statusBackProcsState
@@ -1321,8 +1325,10 @@ _UpdateBackgroundProcsState_()
    then statusBackProcsState="ENABLED"
    else statusBackProcsState="DISABLED"
    fi
-   if [ ! -s "$outJSfile" ] || \
-      ! grep -q "^var backgroundProcsState =.*" "$outJSfile"
+   if [ ! -s "$outJSfile" ]
+   then
+       echo "var backgroundProcsState = '${statusBackProcsState}';" >> "$outJSfile"
+   elif ! grep -q "^var backgroundProcsState =.*" "$outJSfile"
    then
        sed -i "3 i var backgroundProcsState = '${statusBackProcsState}';" "$outJSfile"
    else
@@ -1330,9 +1336,9 @@ _UpdateBackgroundProcsState_()
    fi
 }
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Dec-14] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-23] ##
+##----------------------------------------##
 _UpdateDatabaseFileSizeInfo_()
 {
    local databaseFileSize
@@ -1340,8 +1346,10 @@ _UpdateDatabaseFileSizeInfo_()
    [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    databaseFileSize="$(_GetFileSize_ "$DNS_DB" HRx)"
-   if [ ! -s "$outJSfile" ] || \
-      ! grep -q "^var sqlDatabaseFileSize =.*" "$outJSfile"
+   if [ ! -s "$outJSfile" ]
+   then
+       echo "var sqlDatabaseFileSize = '${databaseFileSize}';" >> "$outJSfile"
+   elif ! grep -q "^var sqlDatabaseFileSize =.*" "$outJSfile"
    then
        sed -i "1 i var sqlDatabaseFileSize = '${databaseFileSize}';" "$outJSfile"
    else
@@ -2130,13 +2138,13 @@ _ShowDatabaseFileInfo_()
 
 _GetTrimLogTimeStamp_() { printf "[$(date +"$trimLogDateForm")]" ; }
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Dec-13] ##
-##-------------------------------------##
+##----------------------------------------##
+## Modified by Martinski W. [2024-Dec-23] ##
+##----------------------------------------##
 _ApplyDatabaseSQLCmds_()
 {
     local errorCount=0  maxErrorCount=5
-    local triesCount=0  maxTriesCount=15  sqlErrorMsg
+    local triesCount=0  maxTriesCount=25  sqlErrorMsg
     local tempLogFilePath="/tmp/uiDivStats_TMP_$$.LOG"
 
     resultStr=""
@@ -2152,8 +2160,7 @@ _ApplyDatabaseSQLCmds_()
         sqlErrorMsg="$(tail -n1 "$tempLogFilePath")"
         if echo "$sqlErrorMsg" | grep -qE "^(Error:|Parse error|Runtime error)"
         then
-            echo "$sqlErrorMsg"
-            if echo "$sqlErrorMsg" | grep -qE "^Runtime error .*: database is locked"
+            if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
             then foundLocked=true ; sleep 2 ; continue
             fi
             errorCount="$((errorCount + 1))"
@@ -2179,12 +2186,12 @@ _ApplyDatabaseSQLCmds_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2024-Dec-23] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmdsForTrim_()
 {
     local errorCount=0  maxErrorCount=5
-    local triesCount=0  maxTriesCount=15  sqlErrorMsg
+    local triesCount=0  maxTriesCount=25  sqlErrorMsg
 
     resultStr=""
     foundError=false ; foundLocked=false
@@ -2200,8 +2207,7 @@ _ApplyDatabaseSQLCmdsForTrim_()
         printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$trimLOGFilePath"
         if echo "$sqlErrorMsg" | grep -qE "^(Error:|Parse error|Runtime error)"
         then
-            echo "$sqlErrorMsg"
-            if echo "$sqlErrorMsg" | grep -qE "^Runtime error .*: database is locked"
+            if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
             then foundLocked=true ; sleep 2 ; continue
             fi
             errorCount="$((errorCount + 1))"
