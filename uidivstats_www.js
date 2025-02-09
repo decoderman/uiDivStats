@@ -20,6 +20,14 @@ var sqlDatabaseFileSize = '0 Bytes';
 var tmpfsAvailableSpace = '0 Bytes';
 var backgroundProcsState = 'ENABLED';
 
+/**-------------------------------------**/
+/** Added by Martinski W. [2025-Feb-08] **/
+/**-------------------------------------**/
+const InvREDct = '<span style="margin-left:2px; background-color:#C81927; color:#f2f2f2;">&nbsp;'
+const InvGRNct = '<span style="margin-left:2px; background-color:#229652; color:#f2f2f2;">&nbsp;'
+const InvYLWct = '<span style="margin-left:2px; background-color:yellow; color:black;">&nbsp;'
+const InvCLEAR = '&nbsp;</span>'
+
 Chart.defaults.global.defaultFontColor = '#CCC';
 Chart.Tooltip.positioners.cursor = function(chartElements,coordinates){
 	return coordinates;
@@ -36,7 +44,8 @@ function keyHandler(e){
 	}
 }
 
-function isFilterIP(o,event){
+function isFilterIP(o,event)
+{
 	var keyPressed = event.keyCode ? event.keyCode : event.which;
 	var i,j;
 	if(validator.isFunctionButton(event)){
@@ -81,45 +90,68 @@ function isFilterIP(o,event){
 	return false;
 }
 
-function Validate_Number_Setting(forminput,upperlimit,lowerlimit){
+function ValidateNumberSetting (forminput, upperlimit, lowerlimit)
+{
 	var inputname = forminput.name;
 	var inputvalue = forminput.value*1;
 
-	if(inputvalue > upperlimit || inputvalue < lowerlimit){
+	if (inputvalue > upperlimit || inputvalue < lowerlimit)
+	{
 		$(forminput).addClass('invalid');
 		return false;
 	}
-	else{
+	else
+	{
 		$(forminput).removeClass('invalid');
 		return true;
 	}
 }
 
-function Format_Number_Setting(forminput){
+function FormatNumberSetting (forminput)
+{
 	var inputname = forminput.name;
 	var inputvalue = forminput.value*1;
 
-	if(forminput.value.length == 0 || inputvalue == NaN){
+	if (forminput.value.length == 0 || inputvalue == NaN)
+	{
 		return false;
 	}
-	else{
+	else
+	{
 		forminput.value = parseInt(forminput.value);
 		return true;
 	}
 }
 
-function Validate_All(){
-	var validationfailed = false;
-	if(! Validate_Number_Setting(document.form.uidivstats_lastxqueries,10000,10)){validationfailed=true;}
-	if(! Validate_Number_Setting(document.form.uidivstats_daystokeep,365,1)){validationfailed=true;}
+/**----------------------------------------**/
+/** Modified by Martinski W. [2025-Feb-08] **/
+/**----------------------------------------**/
+//Between 15 and 365 days, Default: 30//
+const theDaysToKeepMIN = 15;
+const theDaysToKeepDEF = 30;
+const theDaysToKeepMAX = 365;
+const theDaysToKeepTXT = `(between ${theDaysToKeepMIN} and ${theDaysToKeepMAX}, default: ${theDaysToKeepDEF})`;
 
-	if(validationfailed){
-		alert('Validation for some fields failed. Please correct invalid values and try again.');
+//Between 10 and 10000 queries, Default: 5000//
+const theLastXQueriesMIN = 10;
+const theLastXQueriesDEF = 5000;
+const theLastXQueriesMAX = 10000;
+const theLastXQueriesTXT = `(between ${theLastXQueriesMIN} and ${theLastXQueriesMAX}, default: ${theLastXQueriesDEF})`;
+
+function ValidateAll()
+{
+	var validationfailed = false;
+	if (!ValidateNumberSetting(document.form.uidivstats_lastxqueries, theLastXQueriesMAX, theLastXQueriesMIN))
+	{ validationfailed = true; }
+	if (!ValidateNumberSetting(document.form.uidivstats_daystokeep, theDaysToKeepMAX, theDaysToKeepMIN))
+	{ validationfailed = true; }
+	if (validationfailed)
+    {
+		alert('**ERROR**\nValidation for some fields failed.\nPlease correct invalid values and try again.');
 		return false;
 	}
-	else{
-		return true;
-	}
+	else
+	{ return true; }
 }
 
 $(document).keydown(function(e){keyHandler(e);});
@@ -136,7 +168,8 @@ var intervallist = [24,7,30];
 var bordercolourlist = ['#fc8500','#42ecf5'];
 var backgroundcolourlist = ['rgba(252,133,0,0.5)','rgba(66,236,245,0.5)'];
 
-function Draw_Chart_NoData(txtchartname,texttodisplay){
+function Draw_Chart_NoData(txtchartname,texttodisplay)
+{
 	document.getElementById('canvasChart'+txtchartname).width = '735';
 	document.getElementById('canvasChart'+txtchartname).height = '500';
 	document.getElementById('canvasChart'+txtchartname).style.width = '735px';
@@ -548,7 +581,7 @@ function initial()
 	SetCurrentPage();
 	LoadCustomSettings();
 	show_menu();
-	get_conf_file();
+	GetConfigFile();
 	get_domainstoexclude_file();
 
 	$('#sortTableContainer').empty();
@@ -568,7 +601,7 @@ function initial()
 }
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Dec-22] **/
+/** Modified by Martinski W. [2025-Feb-08] **/
 /**----------------------------------------**/
 function get_sqldata_file()
 {
@@ -584,13 +617,15 @@ function get_sqldata_file()
 			var backgroundProcsStateStr;
 			SetuiDivStatsTitle();
 			document.getElementById('databaseSize_text').textContent = 'Database Size: '+sqlDatabaseFileSize;
-			document.getElementById('tmpfsFreeSpace_text').innerHTML = 'TMPFS Available: '+tmpfsAvailableSpace+
-			                                                           '<span style="padding-left:25px;">RAM Available: '+ramAvailableSpace+'</span>';
-			if (backgroundProcsState === 'ENABLED')
-			{ backgroundProcsStateStr = '<span style="margin-left:8px; background-color:#229652; color:#f2f2f2;">&nbsp;ENABLED&nbsp;</span>' ; }
+			document.getElementById('tmpfsFreeSpace_text').innerHTML =
+			    'TMPFS Reported: '+tmpfsAvailableSpace+'<span style="padding-left:25px;">RAM Available: '+ramAvailableSpace+'</span>';
+
+            if (backgroundProcsState === 'ENABLED')
+			{ backgroundProcsStateStr = `${InvGRNct}ENABLED${InvCLEAR}`; }
 			else
-			{ backgroundProcsStateStr = '<span style="margin-left:8px; background-color:#C81927; color:#f2f2f2;">&nbsp;DISABLED&nbsp;</span>' ; }
-			document.getElementById('backProcStatus_text').innerHTML = 'Currently: '+backgroundProcsStateStr;
+			{ backgroundProcsStateStr = `${InvREDct}DISABLED${InvCLEAR}`; }
+			document.getElementById('backProcStatus_text').innerHTML = 'Currently: ' + backgroundProcsStateStr;
+
 			$('#uidivstats_div_keystats').append(BuildKeyStatsTableHtml('Key Stats','keystats'));
 			$('#keystats_Period').val(GetCookie('keystats_Period','number')).change();
 			get_clients_file();
@@ -598,7 +633,8 @@ function get_sqldata_file()
 	});
 }
 
-function get_clients_file(){
+function get_clients_file()
+{
 	$.ajax({
 		url: '/ext/uiDivStats/csv/ipdistinctclients.js',
 		dataType: 'script',
@@ -629,32 +665,44 @@ function get_clients_file(){
 }
 
 /**----------------------------------------**/
-/** Modified by Martinski W. [2024-Nov-01] **/
+/** Modified by Martinski W. [2025-Feb-08] **/
 /**----------------------------------------**/
-function get_conf_file()
+function GetConfigFile()
 {
 	$.ajax({
 		url: '/ext/uiDivStats/config.htm',
 		dataType: 'text',
 		error: function(xhr){
-			setTimeout(get_conf_file,1000);
+			setTimeout(GetConfigFile,1000);
 		},
 		success: function(data)
 		{
+			let settingname, settingvalue;
 			var configdata = data.split('\n');
 			configdata = configdata.filter(Boolean);
-			for (var i = 0; i < configdata.length; i++)
+
+			for (var indx = 0; indx < configdata.length; indx++)
 			{
-				if (configdata[i].match(/^QUERYMODE|^CACHEMODE|^DAYSTOKEEP|^LASTXQUERIES/) != null)
+				if (configdata[indx].length === 0 ||
+				    configdata[indx].match('^[ ]*#') !== null)
+				{ continue; }  //Skip comments & empty lines//
+
+				settingname = configdata[indx].split('=')[0];
+				settingvalue = configdata[indx].split('=')[1].replace(/(\r\n|\n|\r)/gm,'');
+
+				if (settingname.match(/^QUERYMODE|^CACHEMODE|^DAYSTOKEEP|^LASTXQUERIES/) != null)
 				{
-				   eval('document.form.uidivstats_'+configdata[i].split('=')[0].toLowerCase()).value = configdata[i].split('=')[1].replace(/(\r\n|\n|\r)/gm,'');
+				   eval('document.form.uidivstats_'+settingname.toLowerCase()).value = settingvalue;
 				}
 			}
+			document.getElementById('theDaysToKeepText').textContent = theDaysToKeepTXT;
+			document.getElementById('theLastXQueriesText').textContent = theLastXQueriesTXT;
 		}
 	});
 }
 
-function get_domainstoexclude_file(){
+function get_domainstoexclude_file()
+{
 	$.ajax({
 		url: '/ext/uiDivStats/domainstoexclude.htm',
 		dataType: 'text',
@@ -667,7 +715,8 @@ function get_domainstoexclude_file(){
 	});
 }
 
-function get_DivStats_file(){
+function get_DivStats_file()
+{
 	$.ajax({
 		url: '/ext/uiDivStats/DiversionStats.htm',
 		dataType: 'text',
@@ -808,19 +857,20 @@ function DoUpdate()
 
 function SaveConfig()
 {
-	if (Validate_All()){
+	if (ValidateAll())
+	{
 		document.getElementById('amng_custom').value = JSON.stringify($('form').serializeObject());
 		document.form.action_script.value = 'start_uiDivStatsconfig';
 		document.form.action_wait.value = 10;
 		showLoading();
 		document.form.submit();
 	}
-	else{
-		return false;
-	}
+	else
+	{ return false; }
 }
 
-function RefreshNow(){
+function RefreshNow()
+{
 	clearTimeout(tout);
 	showhide('spanRefreshNow',false);
 	document.formScriptActions.action_script.value='start_uiDivStatsquerylog';

@@ -12,7 +12,7 @@
 ##             https://github.com/jackyaz/uiDivStats             ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2024-Dec-23
+# Last Modified: 2025-Feb-08
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -34,17 +34,18 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.7"
+readonly SCRIPT_VERSION="v4.0.8"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
 readonly SCRIPT_CONF="$SCRIPT_DIR/config"
 readonly SCRIPT_USB_DIR="/opt/share/uiDivStats.d"
-readonly SCRIPT_WEBPAGE_DIR="$(readlink /www/user)"
+readonly SCRIPT_WEBPAGE_DIR="$(readlink -f /www/user)"
 readonly SCRIPT_WEB_DIR="$SCRIPT_WEBPAGE_DIR/$SCRIPT_NAME"
 readonly SHARED_DIR="/jffs/addons/shared-jy"
 readonly SHARED_REPO="https://raw.githubusercontent.com/decoderman/shared-jy/master"
 readonly SHARED_WEB_DIR="$SCRIPT_WEBPAGE_DIR/shared-jy"
+readonly TEMP_MENU_TREE="/tmp/menuTree.js"
 readonly DNS_DB="$SCRIPT_USB_DIR/dnsqueries.db"
 readonly CSV_OUTPUT_DIR="$SCRIPT_USB_DIR/csv"
 [ -z "$(nvram get odmpid)" ] && ROUTER_MODEL="$(nvram get productid)" || ROUTER_MODEL="$(nvram get odmpid)"
@@ -53,7 +54,7 @@ readonly DIVERSION_DIR="/opt/share/diversion"
 readonly STATSEXCLUDE_LIST_FILE="$SCRIPT_DIR/statsexcludelist"
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-06] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 # For daily CRON job to trim database #
 readonly defTrimDB_Hour=0
@@ -63,6 +64,9 @@ readonly trimLOGFileSize=65536
 readonly trimLOGFilePath="${SCRIPT_USB_DIR}/uiDivStats_Trim.LOG"
 readonly trimTMPOldsFile="${SCRIPT_USB_DIR}/uiDivStats_Olds.TMP"
 readonly trimLogDateForm="%Y-%m-%d %H:%M:%S"
+readonly scriptVersRegExp="v[0-9]{1,2}([.][0-9]{1,2})([.][0-9]{1,2})"
+readonly webPageFileRegExp="user([1-9]|[1-2][0-9])[.]asp"
+readonly webPageLineRegExp="\{url: \"$webPageFileRegExp\", tabName: \"$SCRIPT_NAME\"\}"
 
 readonly oneKByte=1024
 readonly oneMByte=1048576
@@ -80,14 +84,21 @@ readonly BOLD="\\e[1m"
 readonly SETTING="${BOLD}\\e[36m"
 readonly CLEARFORMAT="\\e[0m"
 
-##-------------------------------------##
-## Added by Martinski W. [2024-Sep-22] ##
-##-------------------------------------##
-readonly REDct="\033[1;31m\033[1m"
-readonly GRNct="\033[1;32m\033[1m"
-readonly CLEARct="\033[0m"
+##----------------------------------------##
+## Modified by Martinski W. [2025-Feb-08] ##
+##----------------------------------------##
+readonly CLRct="\033[0m"
+readonly REDct="\033[1;31m"
+readonly GRNct="\033[1;32m"
+readonly CritIREDct="\e[41m"
+readonly CritBREDct="\e[30;101m"
+readonly PassBGRNct="\e[30;102m"
+readonly WarnBYLWct="\e[30;103m"
 
 ### End of output format variables ###
+
+# Give priority to built-in binaries #
+export PATH="/bin:/usr/bin:/sbin:/usr/sbin:$PATH"
 
 ##----------------------------------------##
 ## Modified by Martinski W. [2024-Dec-12] ##
@@ -187,8 +198,9 @@ Clear_Lock()
 	return 0
 }
 
-############################################################################
-
+##----------------------------------------##
+## Modified by Martinski W. [2025-Jan-28] ##
+##----------------------------------------##
 Set_Version_Custom_Settings()
 {
 	SETTINGSFILE="/jffs/addons/custom_settings.txt"
@@ -196,9 +208,11 @@ Set_Version_Custom_Settings()
 		local)
 			if [ -f "$SETTINGSFILE" ]
 			then
-				if [ "$(grep -c "uidivstats_version_local" $SETTINGSFILE)" -gt 0 ]; then
-					if [ "$2" != "$(grep "uidivstats_version_local" /jffs/addons/custom_settings.txt | cut -f2 -d' ')" ]; then
-						sed -i "s/uidivstats_version_local.*/uidivstats_version_local $2/" "$SETTINGSFILE"
+				if [ "$(grep -c "^uidivstats_version_local" "$SETTINGSFILE")" -gt 0 ]
+				then
+					if [ "$2" != "$(grep "^uidivstats_version_local" "$SETTINGSFILE" | cut -f2 -d' ')" ]
+					then
+						sed -i "s/^uidivstats_version_local.*/uidivstats_version_local $2/" "$SETTINGSFILE"
 					fi
 				else
 					echo "uidivstats_version_local $2" >> "$SETTINGSFILE"
@@ -210,9 +224,11 @@ Set_Version_Custom_Settings()
 		server)
 			if [ -f "$SETTINGSFILE" ]
 			then
-				if [ "$(grep -c "uidivstats_version_server" $SETTINGSFILE)" -gt 0 ]; then
-					if [ "$2" != "$(grep "uidivstats_version_server" /jffs/addons/custom_settings.txt | cut -f2 -d' ')" ]; then
-						sed -i "s/uidivstats_version_server.*/uidivstats_version_server $2/" "$SETTINGSFILE"
+				if [ "$(grep -c "^uidivstats_version_server" "$SETTINGSFILE")" -gt 0 ]
+				then
+					if [ "$2" != "$(grep "^uidivstats_version_server" "$SETTINGSFILE" | cut -f2 -d' ')" ]
+					then
+						sed -i "s/^uidivstats_version_server.*/uidivstats_version_server $2/" "$SETTINGSFILE"
 					fi
 				else
 					echo "uidivstats_version_server $2" >> "$SETTINGSFILE"
@@ -224,21 +240,28 @@ Set_Version_Custom_Settings()
 	esac
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2025-Jan-05] ##
+##----------------------------------------##
 Update_Check()
 {
 	echo 'var updatestatus = "InProgress";' > "$SCRIPT_WEB_DIR/detect_update.js"
 	doupdate="false"
-	localver=$(grep "SCRIPT_VERSION=" "/jffs/scripts/$SCRIPT_NAME" | grep -m1 -oE 'v[0-9]{1,2}([.][0-9]{1,2})([.][0-9]{1,2})')
-	/usr/sbin/curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep -qF "jackyaz" || { Print_Output true "404 error detected - stopping update" "$ERR"; return 1; }
-	serverver=$(/usr/sbin/curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep "SCRIPT_VERSION=" | grep -m1 -oE 'v[0-9]{1,2}([.][0-9]{1,2})([.][0-9]{1,2})')
-	if [ "$localver" != "$serverver" ]; then
+	localver="$(grep "SCRIPT_VERSION=" "/jffs/scripts/$SCRIPT_NAME" | grep -m1 -oE "$scriptVersRegExp")"
+	[ -n "$localver" ] && Set_Version_Custom_Settings local "$localver"
+	curl -fsL --retry 4 --retry-delay 5 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep -qF "jackyaz" || \
+	{ Print_Output true "404 error detected - stopping update" "$ERR"; return 1; }
+	serverver="$(curl -fsL --retry 4 --retry-delay 5 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep "SCRIPT_VERSION=" | grep -m1 -oE "$scriptVersRegExp")"
+	if [ "$localver" != "$serverver" ]
+	then
 		doupdate="version"
 		Set_Version_Custom_Settings server "$serverver"
 		echo 'var updatestatus = "'"$serverver"'";'  > "$SCRIPT_WEB_DIR/detect_update.js"
 	else
 		localmd5="$(md5sum "/jffs/scripts/$SCRIPT_NAME" | awk '{print $1}')"
-		remotemd5="$(curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | md5sum | awk '{print $1}')"
-		if [ "$localmd5" != "$remotemd5" ]; then
+		remotemd5="$(curl -fsL --retry 4 --retry-delay 5 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | md5sum | awk '{print $1}')"
+		if [ "$localmd5" != "$remotemd5" ]
+		then
 			doupdate="md5"
 			Set_Version_Custom_Settings server "$serverver-hotfix"
 			echo 'var updatestatus = "'"$serverver-hotfix"'";'  > "$SCRIPT_WEB_DIR/detect_update.js"
@@ -250,6 +273,9 @@ Update_Check()
 	echo "$doupdate,$localver,$serverver"
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2025-Jan-05] ##
+##----------------------------------------##
 Update_Version()
 {
 	if [ $# -eq 0 ] || [ -z "$1" ]
@@ -267,16 +293,16 @@ Update_Version()
 
 		if [ "$isupdate" != "false" ]
 		then
-			printf "\\n${BOLD}Do you want to continue with the update? (y/n)${CLEARFORMAT}  "
+			printf "\n${BOLD}Do you want to continue with the update? (y/n)${CLEARFORMAT}  "
 			read -r confirm
 			case "$confirm" in
 				y|Y)
-					printf "\\n"
+					printf "\n"
 					Update_File uidivstats_www.asp
 					Update_File taildns.tar.gz
 					Update_File shared-jy.tar.gz
-
-					/usr/sbin/curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" -o "/jffs/scripts/$SCRIPT_NAME" && Print_Output true "$SCRIPT_NAME successfully updated"
+					Download_File "$SCRIPT_REPO/$SCRIPT_NAME.sh" "/jffs/scripts/$SCRIPT_NAME" && \
+					Print_Output true "$SCRIPT_NAME successfully updated" "$PASS"
 					chmod 0755 "/jffs/scripts/$SCRIPT_NAME"
 					Set_Version_Custom_Settings local "$serverver"
 					Set_Version_Custom_Settings server "$serverver"
@@ -286,7 +312,7 @@ Update_Version()
 					exit 0
 				;;
 				*)
-					printf "\\n"
+					printf "\n"
 					Clear_Lock
 					return 1
 				;;
@@ -299,12 +325,13 @@ Update_Version()
 
 	if [ "$1" = "force" ]
 	then
-		serverver=$(/usr/sbin/curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep "SCRIPT_VERSION=" | grep -m1 -oE 'v[0-9]{1,2}([.][0-9]{1,2})([.][0-9]{1,2})')
+		serverver="$(curl -fsL --retry 4 --retry-delay 5 "$SCRIPT_REPO/$SCRIPT_NAME.sh" | grep "SCRIPT_VERSION=" | grep -m1 -oE "$scriptVersRegExp")"
 		Print_Output true "Downloading latest version ($serverver) of $SCRIPT_NAME" "$PASS"
-		Update_File uidivstats_www.asp
 		Update_File taildns.tar.gz
 		Update_File shared-jy.tar.gz
-		/usr/sbin/curl -fsL --retry 3 "$SCRIPT_REPO/$SCRIPT_NAME.sh" -o "/jffs/scripts/$SCRIPT_NAME" && Print_Output true "$SCRIPT_NAME successfully updated" "$PASS"
+		Update_File uidivstats_www.asp
+		Download_File "$SCRIPT_REPO/$SCRIPT_NAME.sh" "/jffs/scripts/$SCRIPT_NAME" && \
+		Print_Output true "$SCRIPT_NAME successfully updated" "$PASS"
 		chmod 0755 "/jffs/scripts/$SCRIPT_NAME"
 		Set_Version_Custom_Settings local "$serverver"
 		Set_Version_Custom_Settings server "$serverver"
@@ -329,10 +356,11 @@ Update_File()
 		Download_File "$SCRIPT_REPO/$1" "$tmpfile"
 		if [ -f "$SCRIPT_DIR/$1" ]
 		then
-			if ! diff -q "$tmpfile" "$SCRIPT_DIR/$1" >/dev/null 2>&1; then
+			if ! diff -q "$tmpfile" "$SCRIPT_DIR/$1" >/dev/null 2>&1
+			then
 				Get_WebUI_Page "$SCRIPT_DIR/$1"
-				sed -i "\\~$MyPage~d" /tmp/menuTree.js
-				rm -f "$SCRIPT_WEBPAGE_DIR/$MyPage" 2>/dev/null
+				sed -i "\\~$MyWebPage~d" "$TEMP_MENU_TREE"
+				rm -f "$SCRIPT_WEBPAGE_DIR/$MyWebPage" 2>/dev/null
 				Download_File "$SCRIPT_REPO/$1" "$SCRIPT_DIR/$1"
 				Print_Output true "New version of $1 downloaded" "$PASS"
 				Mount_WebUI
@@ -360,7 +388,7 @@ Update_File()
 			Print_Output true "New version of $1 downloaded" "$PASS"
 		else
 			localmd5="$(cat "$SCRIPT_DIR/${1}.md5")"
-			remotemd5="$(curl -fsL --retry 3 "$SCRIPT_REPO/${1}.md5")"
+			remotemd5="$(curl -fsL --retry 4 --retry-delay 5 "$SCRIPT_REPO/${1}.md5")"
 			if [ "$localmd5" != "$remotemd5" ]
 			then
 				Download_File "$SCRIPT_REPO/$1" "$SCRIPT_DIR/$1"
@@ -387,7 +415,7 @@ Update_File()
 			Print_Output true "New version of $1 downloaded" "$PASS"
 		else
 			localmd5="$(cat "$SHARED_DIR/${1}.md5")"
-			remotemd5="$(curl -fsL --retry 3 "$SHARED_REPO/${1}.md5")"
+			remotemd5="$(curl -fsL --retry 4 --retry-delay 5 "$SHARED_REPO/${1}.md5")"
 			if [ "$localmd5" != "$remotemd5" ]
 			then
 				Download_File "$SHARED_REPO/$1" "$SHARED_DIR/$1"
@@ -403,7 +431,7 @@ Update_File()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-21] ##
+## Modified by Martinski W. [2025-Jan-18] ##
 ##----------------------------------------##
 Conf_FromSettings()
 {
@@ -412,12 +440,12 @@ Conf_FromSettings()
 
 	if [ -f "$SETTINGSFILE" ]
 	then
-		if [ "$(grep "uidivstats_" $SETTINGSFILE | grep -v "version" -c)" -gt 0 ]
+		if [ "$(grep "^uidivstats_" $SETTINGSFILE | grep -v "version" -c)" -gt 0 ]
 		then
 			Print_Output true "Updated settings from WebUI found, merging into $SCRIPT_CONF" "$PASS"
 			cp -a "$SCRIPT_CONF" "${SCRIPT_CONF}.bak"
-			grep "uidivstats_" "$SETTINGSFILE" | grep -v "version" > "$TMPFILE"
-			sed -i "s/uidivstats_//g;s/ /=/g" "$TMPFILE"
+			grep "^uidivstats_" "$SETTINGSFILE" | grep -v "version" > "$TMPFILE"
+			sed -i "s/^uidivstats_//g;s/ /=/g" "$TMPFILE"
 			while IFS='' read -r line || [ -n "$line" ]
 			do
 				SETTINGNAME="$(echo "$line" | cut -f1 -d'=' | awk '{print toupper($1)}')"
@@ -431,7 +459,8 @@ Conf_FromSettings()
 					sed -i "s/$SETTINGNAME=.*/$SETTINGNAME=$SETTINGVALUE/" "$SCRIPT_CONF"
 				fi
 			done < "$TMPFILE"
-			grep 'uidivstats_version' "$SETTINGSFILE" > "$TMPFILE"
+
+			grep '^uidivstats_version' "$SETTINGSFILE" > "$TMPFILE"
 			sed -i "\\~uidivstats_~d" "$SETTINGSFILE"
 			mv -f "$SETTINGSFILE" "${SETTINGSFILE}.bak"
 			cat "${SETTINGSFILE}.bak" "$TMPFILE" > "$SETTINGSFILE"
@@ -716,10 +745,10 @@ Auto_Cron()
 			fi
 		;;
 		delete)
-			STARTUPLINECOUNTGENERATE=$(cru l | grep -c "${SCRIPT_NAME}_generate")
-			STARTUPLINECOUNTTRIM=$(cru l | grep -c "${SCRIPT_NAME}_trim")
-			STARTUPLINECOUNTQUERYLOG=$(cru l | grep -c "${SCRIPT_NAME}_querylog")
-			STARTUPLINECOUNTFLUSHTODB=$(cru l | grep -c "${SCRIPT_NAME}_flushtodb")
+			STARTUPLINECOUNTGENERATE="$(cru l | grep -c "${SCRIPT_NAME}_generate")"
+			STARTUPLINECOUNTTRIM="$(cru l | grep -c "${SCRIPT_NAME}_trim")"
+			STARTUPLINECOUNTQUERYLOG="$(cru l | grep -c "${SCRIPT_NAME}_querylog")"
+			STARTUPLINECOUNTFLUSHTODB="$(cru l | grep -c "${SCRIPT_NAME}_flushtodb")"
 
 			if [ "$STARTUPLINECOUNTGENERATE" -gt 0 ]; then
 				cru d "${SCRIPT_NAME}_generate"
@@ -737,10 +766,12 @@ Auto_Cron()
 	esac
 }
 
-Auto_DNSMASQ_Postconf(){
+Auto_DNSMASQ_Postconf()
+{
 	case $1 in
 		create)
-			if [ -f /jffs/scripts/dnsmasq.postconf ]; then
+			if [ -f /jffs/scripts/dnsmasq.postconf ]
+			then
 				STARTUPLINECOUNT=$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/dnsmasq.postconf)
 				STARTUPLINECOUNTEX=$(grep -cx "/jffs/scripts/$SCRIPT_NAME dnsmasq & # $SCRIPT_NAME" /jffs/scripts/dnsmasq.postconf)
 
@@ -759,7 +790,8 @@ Auto_DNSMASQ_Postconf(){
 			fi
 		;;
 		delete)
-			if [ -f /jffs/scripts/dnsmasq.postconf ]; then
+			if [ -f /jffs/scripts/dnsmasq.postconf ]
+			then
 				STARTUPLINECOUNT=$(grep -c '# '"$SCRIPT_NAME" /jffs/scripts/dnsmasq.postconf)
 
 				if [ "$STARTUPLINECOUNT" -gt 0 ]; then
@@ -770,19 +802,43 @@ Auto_DNSMASQ_Postconf(){
 	esac
 }
 
-Download_File(){
-	/usr/sbin/curl -fsL --retry 3 "$1" -o "$2"
-}
+##----------------------------------------##
+## Modified by Martinski W. [2025-Jan-05] ##
+##----------------------------------------##
+Download_File()
+{ /usr/sbin/curl -LSs --retry 4 --retry-delay 5 --retry-connrefused "$1" -o "$2" ; }
 
-Get_WebUI_Page(){
-	MyPage="none"
-	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-		page="/www/user/user$i.asp"
-		if [ -f "$page" ] && [ "$(md5sum < "$1")" = "$(md5sum < "$page")" ]; then
-			MyPage="user$i.asp"
-			return
-		elif [ "$MyPage" = "none" ] && [ ! -f "$page" ]; then
-			MyPage="user$i.asp"
+##----------------------------------------##
+## Modified by Martinski W. [2025-Feb-08] ##
+##----------------------------------------##
+Get_WebUI_Page()
+{
+	local webPageEntry  webPagePath  webPageFile
+	MyWebPage="NONE"
+
+	if [ -f "$TEMP_MENU_TREE" ]
+	then
+		webPageEntry="$(grep -E "$webPageLineRegExp" "$TEMP_MENU_TREE")"
+		if [ -n "$webPageEntry" ]
+		then
+			webPageFile="$(echo "$webPageEntry" | grep -owE "$webPageFileRegExp")"
+			[ -n "$webPageFile" ] && MyWebPage="$webPageFile"
+		fi
+	fi
+
+	for index in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
+	do
+		webPageFile="user${index}.asp"
+		webPagePath="${SCRIPT_WEBPAGE_DIR}/$webPageFile"
+
+		if [ -f "$webPagePath" ] && \
+		   [ "$(md5sum < "$1")" = "$(md5sum < "$webPagePath")" ]
+		then
+			MyWebPage="$webPageFile"
+			break
+		elif [ "$MyWebPage" = "NONE" ] && [ ! -f "$webPagePath" ]
+		then
+			MyWebPage="$webPageFile"
 		fi
 	done
 }
@@ -795,7 +851,7 @@ Get_WebUI_URL()
 	urldomain=""
 	urlport=""
 
-	urlpage="$(sed -nE "/$SCRIPT_NAME/ s/.*url\: \"(user[0-9]+\.asp)\".*/\1/p" /tmp/menuTree.js)"
+	urlpage="$(sed -nE "/$SCRIPT_NAME/ s/.*url\: \"(user[0-9]+\.asp)\".*/\1/p" "$TEMP_MENU_TREE")"
 	if [ "$(nvram get http_enable)" -eq 1 ]; then
 		urlproto="https"
 	else
@@ -818,8 +874,10 @@ Get_WebUI_URL()
 		echo "WebUI page not found"
 	fi
 }
-### ###
 
+##----------------------------------------##
+## Modified by Martinski W. [2025-Feb-08] ##
+##----------------------------------------##
 Mount_WebUI()
 {
 	Print_Output true "Mounting WebUI tab for $SCRIPT_NAME" "$PASS"
@@ -828,33 +886,34 @@ Mount_WebUI()
 	eval exec "$FD>$LOCKFILE"
 	flock -x "$FD"
 	Get_WebUI_Page "$SCRIPT_DIR/uidivstats_www.asp"
-	if [ "$MyPage" = "none" ]; then
-		Print_Output true "Unable to mount $SCRIPT_NAME WebUI page, exiting" "$CRIT"
+	if [ "$MyWebPage" = "NONE" ]
+	then
+		Print_Output true "**ERROR** Unable to mount $SCRIPT_NAME WebUI page, exiting" "$CRIT"
 		Clear_Lock
 		exit 1
 	fi
-	cp -f "$SCRIPT_DIR/uidivstats_www.asp" "$SCRIPT_WEBPAGE_DIR/$MyPage"
-	echo "$SCRIPT_NAME" > "$SCRIPT_WEBPAGE_DIR/$(echo $MyPage | cut -f1 -d'.').title"
+	cp -fp "$SCRIPT_DIR/uidivstats_www.asp" "$SCRIPT_WEBPAGE_DIR/$MyWebPage"
+	echo "$SCRIPT_NAME" > "$SCRIPT_WEBPAGE_DIR/$(echo "$MyWebPage" | cut -f1 -d'.').title"
 
 	if [ "$(uname -o)" = "ASUSWRT-Merlin" ]
 	then
-		if [ ! -f /tmp/menuTree.js ]; then
-			cp -f /www/require/modules/menuTree.js /tmp/
+		if [ ! -f "$TEMP_MENU_TREE" ]; then
+			cp -fp /www/require/modules/menuTree.js "$TEMP_MENU_TREE"
 		fi
+		sed -i "\\~$MyWebPage~d" "$TEMP_MENU_TREE"
 
-		sed -i "\\~$MyPage~d" /tmp/menuTree.js
-
-		if /bin/grep 'tabName: \"Diversion\"},' /tmp/menuTree.js >/dev/null 2>&1; then
-			sed -i "/tabName: \"Diversion\"/a {url: \"$MyPage\", tabName: \"$SCRIPT_NAME\"}," /tmp/menuTree.js
+		if /bin/grep 'tabName: \"Diversion\"},' "$TEMP_MENU_TREE" >/dev/null 2>&1
+		then
+			sed -i "/tabName: \"Diversion\"/a {url: \"$MyWebPage\", tabName: \"$SCRIPT_NAME\"}," "$TEMP_MENU_TREE"
 		else
-			sed -i "/url: \"Advanced_SwitchCtrl_Content.asp\", tabName:/a {url: \"$MyPage\", tabName: \"$SCRIPT_NAME\"}," /tmp/menuTree.js
+			sed -i "/url: \"Advanced_SwitchCtrl_Content.asp\", tabName:/a {url: \"$MyWebPage\", tabName: \"$SCRIPT_NAME\"}," "$TEMP_MENU_TREE"
 		fi
 
 		umount /www/require/modules/menuTree.js 2>/dev/null
-		mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js
+		mount -o bind "$TEMP_MENU_TREE" /www/require/modules/menuTree.js
 	fi
 	flock -u "$FD"
-	Print_Output true "Mounted $SCRIPT_NAME WebUI page as $MyPage" "$PASS"
+	Print_Output true "Mounted $SCRIPT_NAME WebUI page as $MyWebPage" "$PASS"
 }
 
 ##-------------------------------------##
@@ -875,23 +934,23 @@ _ToggleBackgroundProcsEnabled_()
 
     if [ "$paramStr" = "enable" ] && [ "$dbBackgProcsEnabled" = "true" ]
     then
-        printf "\nBackground processing is already ${GRNct}ENABLED${CLEARct}.\n\n"
+        printf "\nBackground processing is already ${GRNct}ENABLED${CLRct}.\n\n"
         return 0
     fi
     if [ "$paramStr" = "disable" ] && [ "$dbBackgProcsEnabled" = "false" ]
     then
-        printf "\nBackground processing is already ${REDct}DISABLED${CLEARct}.\n\n"
+        printf "\nBackground processing is already ${REDct}DISABLED${CLRct}.\n\n"
         return 0
     fi
     if [ "$dbBackgProcsEnabled" = "true" ]
     then
-        printf "${CRIT} **-WARNING-** ${CLEARct}${BOLD}${WARN}\n"
+        printf "${CRIT} **-WARNING-** ${CLRct}${BOLD}${WARN}\n"
         printf "This option disables the background processing of statistics\n"
         printf "generated from the domain ad-blocking performed by Diversion.\n"
         printf "While in a DISABLED state, the script can be executed but in a\n"
         printf "very constrained mode and with extremely limited functionality.\n"
-        printf "Make sure to re-enable background processing as soon as you can.${CLEARct}\n"
-        if _WaitForYESorNO_ "\nProceed to ${REDct}DISABLE${CLEARct}?"
+        printf "Make sure to re-enable background processing as soon as you can.${CLRct}\n"
+        if _WaitForYESorNO_ "\nProceed to ${REDct}DISABLE${CLRct}?"
         then
             dbBackgProcsEnabled=false
             printf "Disabling background processing...\n"
@@ -899,11 +958,11 @@ _ToggleBackgroundProcsEnabled_()
             /opt/etc/init.d/S90taildns stop >/dev/null 2>&1
             sleep 3
             Auto_Cron delete 2>/dev/null
-            printf "Background processing is now ${REDct}DISABLED${CLEARct}.\n\n"
+            printf "Background processing is now ${REDct}DISABLED${CLRct}.\n\n"
             _UpdateBackgroundProcsState_
             return 0
         else
-            printf "Background processing remains ${GRNct}ENABLED${CLEARct}.\n\n"
+            printf "Background processing remains ${GRNct}ENABLED${CLRct}.\n\n"
             return 1
         fi
     fi
@@ -915,7 +974,7 @@ _ToggleBackgroundProcsEnabled_()
         Auto_Cron create 2>/dev/null
         /opt/etc/init.d/S90taildns start >/dev/null 2>&1
         sleep 2
-        printf "Background processing is now ${GRNct}ENABLED${CLEARct}.\n\n"
+        printf "Background processing is now ${GRNct}ENABLED${CLRct}.\n\n"
         _UpdateBackgroundProcsState_
         return 0
     fi
@@ -993,10 +1052,11 @@ CacheMode()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-15] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 DaysToKeep()
 {
+	local MINvalue=15  MAXvalue=365  #Days#
 	case "$1" in
 		update)
 			daysToKeep="$(DaysToKeep check)"
@@ -1004,12 +1064,12 @@ DaysToKeep()
 			while true
 			do
 				ScriptHeader
-				printf "${BOLD}Current number of days to keep data: ${GRNct}${daysToKeep}${CLEARct}\n"
-				printf "\n${BOLD}Please enter the maximum number of days\nto keep data for [5-365] (e=Exit):${CLEARFORMAT}  "
+				printf "${BOLD}Current number of days to keep data: ${GRNct}${daysToKeep}${CLRct}\n\n"
+				printf "${BOLD}Please enter the maximum number of days\nto keep the data for [${MINvalue}-${MAXvalue}] (e=Exit):${CLEARFORMAT}  "
 				read -r daystokeep_choice
 				if [ -z "$daystokeep_choice" ] && \
-				   echo "$daysToKeep" | grep -qE "^([1-9][0-9]{0,2})$" && \
-				   [ "$daysToKeep" -ge 5 ] && [ "$daysToKeep" -le 365 ]
+				   echo "$daysToKeep" | grep -qE "^([1-9][0-9]{1,2})$" && \
+				   [ "$daysToKeep" -ge "$MINvalue" ] && [ "$daysToKeep" -le "$MAXvalue" ]
 				then
 					exitLoop=true
 					break
@@ -1019,11 +1079,11 @@ DaysToKeep()
 					break
 				elif ! Validate_Number "$daystokeep_choice"
 				then
-					printf "\n${ERR}Please enter a valid number [5-365].${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a valid number [${MINvalue}-${MAXvalue}].${CLEARFORMAT}\n"
 					PressEnter
-				elif [ "$daystokeep_choice" -lt 5 ] || [ "$daystokeep_choice" -gt 365 ]
+				elif [ "$daystokeep_choice" -lt "$MINvalue" ] || [ "$daystokeep_choice" -gt "$MAXvalue" ]
 				then
-					printf "\n${ERR}Please enter a number between 5 and 365.${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a number between ${MINvalue} and ${MAXvalue}.${CLEARFORMAT}\n"
 					PressEnter
 				else
 					daysToKeep="$daystokeep_choice"
@@ -1048,10 +1108,11 @@ DaysToKeep()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-15] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 LastXQueries()
 {
+	local MINvalue=10  MAXvalue=10000  #Queries#
 	case "$1" in
 		update)
 			lastXQueries="$(LastXQueries check)"
@@ -1059,12 +1120,12 @@ LastXQueries()
 			while true
 			do
 				ScriptHeader
-				printf "${BOLD}Current number of queries to display: ${GRNct}${lastXQueries}${CLEARct}\n"
-				printf "\n${BOLD}Please enter the maximum number of queries\nto display in the WebUI [10-10000] (e=Exit):${CLEARFORMAT}  "
+				printf "${BOLD}Current number of queries to display: ${GRNct}${lastXQueries}${CLRct}\n\n"
+				printf "${BOLD}Please enter the maximum number of queries\nto display in the WebUI [${MINvalue}-${MAXvalue}] (e=Exit):${CLEARFORMAT}  "
 				read -r lastx_choice
 				if [ -z "$lastx_choice" ] && \
 				   echo "$lastXQueries" | grep -qE "^([1-9][0-9]{1,4})$" && \
-				   [ "$lastXQueries" -ge 10 ] && [ "$lastXQueries" -le 10000 ]
+				   [ "$lastXQueries" -ge "$MINvalue" ] && [ "$lastXQueries" -le "$MAXvalue" ]
 				then
 					exitLoop=true
 					break
@@ -1074,11 +1135,11 @@ LastXQueries()
 					break
 				elif ! Validate_Number "$lastx_choice"
 				then
-					printf "\n${ERR}Please enter a valid number [10-10000].${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a valid number [${MINvalue}-${MAXvalue}].${CLEARFORMAT}\n"
 					PressEnter
-				elif [ "$lastx_choice" -lt 10 ] || [ "$lastx_choice" -gt 10000 ]
+				elif [ "$lastx_choice" -lt "$MINvalue" ] || [ "$lastx_choice" -gt "$MAXvalue" ]
 				then
-					printf "\n${ERR}Please enter a number between 10 and 10000.${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a number between ${MINvalue} and ${MAXvalue}.${CLEARFORMAT}\n"
 					PressEnter
 				else
 					lastXQueries="$lastx_choice"
@@ -1270,94 +1331,87 @@ _GetAvailableRAM_()
    echo "${theMemAvailHR}"
 }
 
+##-------------------------------------##
+## Added by Martinski W. [2025-Feb-08] ##
+##-------------------------------------##
+_WriteVarDefToJSFile_()
+{
+   if [ $# -lt 2 ] || [ -z "$1" ] || [ -z "$2" ]
+   then return 1; fi
+
+   local varValue
+   if [ $# -eq 3 ] && [ "$3" = "true" ]
+   then varValue="$2"
+   else varValue="'${2}'"
+   fi
+
+   local targetJSfile="$SCRIPT_USB_DIR/SQLData.js"
+   if [ ! -s "$targetJSfile" ]
+   then
+       echo "var $1 = ${varValue};" > "$targetJSfile"
+   elif
+      ! grep -q "^var $1 =.*" "$targetJSfile"
+   then
+       sed -i "1 i var $1 = ${varValue};" "$targetJSfile"
+   elif
+      ! grep -q "^var $1 = ${varValue};" "$targetJSfile"
+   then
+       sed -i "s/^var $1 =.*/var $1 = ${varValue};/" "$targetJSfile"
+   fi
+}
+
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-23] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 _UpdateRAM_FreeSpaceInfo_()
 {
    local ramFreeSpace
-   local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
    [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    ramFreeSpace="$(_GetAvailableRAM_ HRx)"
-   if [ ! -s "$outJSfile" ]
-   then
-       echo "var ramAvailableSpace = '${ramFreeSpace}';" >> "$outJSfile"
-   elif ! grep -q "^var ramAvailableSpace =.*" "$outJSfile"
-   then
-       sed -i "1 i var ramAvailableSpace = '${ramFreeSpace}';" "$outJSfile"
-   else
-       sed -i "s/^var ramAvailableSpace =.*/var ramAvailableSpace = '${ramFreeSpace}';/" "$outJSfile"
-   fi
+   _WriteVarDefToJSFile_ "ramAvailableSpace" "$ramFreeSpace"
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-23] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 _UpdateTMPFS_FreeSpaceInfo_()
 {
    local tmpfsFreeSpace
-   local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
    [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    tmpfsFreeSpace="$(_Get_TMPFS_Space_ FREE HR)"
-   if [ ! -s "$outJSfile" ]
-   then
-       echo "var tmpfsAvailableSpace = '${tmpfsFreeSpace}';" >> "$outJSfile"
-   elif ! grep -q "^var tmpfsAvailableSpace =.*" "$outJSfile"
-   then
-       sed -i "2 i var tmpfsAvailableSpace = '${tmpfsFreeSpace}';" "$outJSfile"
-   else
-       sed -i "s/^var tmpfsAvailableSpace =.*/var tmpfsAvailableSpace = '${tmpfsFreeSpace}';/" "$outJSfile"
-   fi
+   _WriteVarDefToJSFile_ "tmpfsAvailableSpace" "$tmpfsFreeSpace"
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-23] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 _UpdateBackgroundProcsState_()
 {
    local statusBackProcsState
-   local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
    [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
    if "$(_ToggleBackgroundProcsEnabled_ check)"
    then statusBackProcsState="ENABLED"
    else statusBackProcsState="DISABLED"
    fi
-   if [ ! -s "$outJSfile" ]
-   then
-       echo "var backgroundProcsState = '${statusBackProcsState}';" >> "$outJSfile"
-   elif ! grep -q "^var backgroundProcsState =.*" "$outJSfile"
-   then
-       sed -i "3 i var backgroundProcsState = '${statusBackProcsState}';" "$outJSfile"
-   else
-       sed -i "s/^var backgroundProcsState =.*/var backgroundProcsState = '${statusBackProcsState}';/" "$outJSfile"
-   fi
+   _WriteVarDefToJSFile_ "backgroundProcsState" "$statusBackProcsState"
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-23] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 _UpdateDatabaseFileSizeInfo_()
 {
    local databaseFileSize
-   local outJSfile="$SCRIPT_USB_DIR/SQLData.js"
    [ ! -d "$SCRIPT_USB_DIR" ] && return 1
 
-   databaseFileSize="$(_GetFileSize_ "$DNS_DB" HRx)"
-   if [ ! -s "$outJSfile" ]
-   then
-       echo "var sqlDatabaseFileSize = '${databaseFileSize}';" >> "$outJSfile"
-   elif ! grep -q "^var sqlDatabaseFileSize =.*" "$outJSfile"
-   then
-       sed -i "1 i var sqlDatabaseFileSize = '${databaseFileSize}';" "$outJSfile"
-   else
-       WritePlainData_ToJS "$outJSfile" "sqlDatabaseFileSize,'${databaseFileSize}'"
-   fi
-   _UpdateRAM_FreeSpaceInfo_
-   _UpdateTMPFS_FreeSpaceInfo_
    _UpdateBackgroundProcsState_
+   databaseFileSize="$(_GetFileSize_ "$DNS_DB" HRx)"
+   _WriteVarDefToJSFile_ "sqlDatabaseFileSize" "$databaseFileSize"
+   _UpdateTMPFS_FreeSpaceInfo_
+   _UpdateRAM_FreeSpaceInfo_
 }
 
 ##-------------------------------------##
@@ -1398,7 +1452,7 @@ _TrimDatabaseTime_()
            while true
            do
                ScriptHeader
-               printf "${BOLD}Current schedule: ${GRNct}Daily at ${trimDBtimeHRx}${CLEARct}\n"
+               printf "${BOLD}Current schedule: ${GRNct}Daily at ${trimDBtimeHRx}${CLRct}\n"
                printf "\n${BOLD}Enter schedule HOUR [0-23] (e=Exit):${CLEARFORMAT}  "
                read -r newTrimDBhour
                if [ -z "$newTrimDBhour" ] && _ValidateCronJobHour_ "$trimDBhour"
@@ -1476,7 +1530,7 @@ UpdateDiversionWeeklyStatsFile()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Nov-15] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 WriteStats_ToJS()
 {
@@ -1484,7 +1538,7 @@ WriteStats_ToJS()
 
 	if [ -f "$2" ]
 	then
-	    sed -i -e '/}/d;/function/d;/document.getElementById/d;' "$2"
+	    sed -i -e '/^}/d;/^function/d;/^document.getElementById/d;' "$2"
 	    awk 'NF' "$2" > "${2}.tmp"
 	    mv -f "${2}.tmp" "$2"
 	fi
@@ -1495,7 +1549,11 @@ WriteStats_ToJS()
 	do html="${html}${line}"
 	done < "$1"
 	html="$html"'"'
-	printf "%s\n}\n" "$html" >> "$2"
+
+	if [ $# -lt 5 ] || [ -z "$5" ]
+	then printf "%s\n}\n" "$html" >> "$2"
+	else printf "%s;\n%s\n}\n" "$html" "$5" >> "$2"
+	fi
 }
 
 ##----------------------------------------##
@@ -1520,7 +1578,7 @@ WritePlainData_ToJS()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Table_Indexes()
 {
@@ -1531,63 +1589,63 @@ Table_Indexes()
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_clients ON dnsqueries (SrcIP);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx1
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_time_clients ON dnsqueries (Timestamp,SrcIP);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx2
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_allowed_time_clients ON dnsqueries (Allowed,Timestamp,SrcIP);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx3
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_clients_time_domains ON dnsqueries (SrcIP,Timestamp,ReqDmn);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx4
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_clients_allowed_time_domains ON dnsqueries (SrcIP,Allowed,Timestamp,ReqDmn);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx5
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_time_domains ON dnsqueries (Timestamp,ReqDmn);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx6
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_allowed_time_domains ON dnsqueries (Allowed,Timestamp,ReqDmn);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx7
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_allowed_time ON dnsqueries (Allowed,Timestamp);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx8
 
 			{
 			  echo "PRAGMA temp_store=1;"
 			  echo "PRAGMA cache_size=-20000;"
 			  echo "CREATE INDEX IF NOT EXISTS idx_time_allowed ON dnsqueries (Timestamp,Allowed);"
 			} > /tmp/uidivstats-upgrade.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql idx9
 		;;
 		drop)
 			true;
@@ -1596,7 +1654,7 @@ Table_Indexes()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 # $1 create/drop $2 tablename $3 frequency (hours) $4 outputfrequency
 TempTime_Table()
@@ -1613,7 +1671,7 @@ TempTime_Table()
 				echo ".output /tmp/timesmax"
 				echo "SELECT CAST(MAX([Timestamp])/$multiplier AS INT)*$multiplier FROM ${2}${4};"
 			} > /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql tme1
 
 			timesmin="$(cat /tmp/timesmin)"
 			timesmax="$(cat /tmp/timesmax)"
@@ -1632,12 +1690,12 @@ TempTime_Table()
 				echo "SELECT x+$multiplier FROM c WHERE x<$timesmax"
 				echo ") SELECT x FROM c;"
 			} > /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql tme2
 			rm -f /tmp/uidivstats.sql
 			;;
 		drop)
 			echo "DROP TABLE IF EXISTS temp_timerange_$2;" > /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql tme3
 			rm -f /tmp/uidivstats.sql
 		;;
 	esac
@@ -1783,7 +1841,7 @@ Write_KeyStats_Sql_ToFile()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Generate_NG()
 {
@@ -1805,30 +1863,30 @@ Generate_NG()
 		echo "END TRANSACTION;"
 	} > /tmp/uidivstats.sql
 
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gnr1
 	rm -f /tmp/uidivstats.sql
 
 	if [ $# -gt 0 ] && [ -n "$1" ] && [ "$1" = "fullrefresh" ]
 	then
 		Write_View_Sql_ToFile drop dnsqueries daily /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gnr2
 
 		Write_View_Sql_ToFile drop dnsqueries weekly /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gnr3
 
 		Write_View_Sql_ToFile drop dnsqueries monthly /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gnr4
 		rm -f /tmp/uidivstats.sql
 	fi
 
 	Write_View_Sql_ToFile create dnsqueries daily 1 /tmp/uidivstats.sql "$timenow"
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gnr5
 
 	Write_View_Sql_ToFile create dnsqueries weekly 7 /tmp/uidivstats.sql "$timenow"
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gnr6
 
 	Write_View_Sql_ToFile create dnsqueries monthly 30 /tmp/uidivstats.sql "$timenow"
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gnr7
 	rm -f /tmp/uidivstats.sql
 
 	TempTime_Table create dnsqueries 0.25 daily
@@ -1866,7 +1924,7 @@ Generate_NG()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Generate_Query_Log()
 {
@@ -1901,7 +1959,7 @@ Generate_Query_Log()
 			echo "PRAGMA temp_store=1;"
 			echo "SELECT [Timestamp] Time,[ReqDmn] ReqDmn,[SrcIP] SrcIP,[QryType] QryType,[Allowed] Allowed FROM [dnsqueries] ORDER BY [Timestamp] DESC LIMIT $recordcount;"
 		} > /tmp/uidivstats-query.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats-query.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats-query.sql gql1
 		rm -f /tmp/uidivstats-query.sql
 
 		cat /tmp/cache-uiDivStats-SQL.tmp.ordered "$CSV_OUTPUT_DIR/SQLQueryLog.tmp" > "$CSV_OUTPUT_DIR/SQLQueryLog.htm" 2> /dev/null
@@ -1915,7 +1973,7 @@ Generate_Query_Log()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Generate_KeyStats()
 {
@@ -1923,10 +1981,10 @@ Generate_KeyStats()
 
 	#DAILY#
 	Write_KeyStats_Sql_ToFile Total dnsqueries daily /tmp/uidivstats.sql
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gks1
 
 	Write_KeyStats_Sql_ToFile Blocked dnsqueries daily /tmp/uidivstats.sql
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gks2
 	rm -f /tmp/uidivstats.sql
 
 	queriesTotaldaily="$(cat /tmp/queriesTotaldaily)"
@@ -1946,10 +2004,10 @@ Generate_KeyStats()
 	then
 		#WEEKLY#
 		Write_KeyStats_Sql_ToFile Total dnsqueries weekly /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gks3
 
 		Write_KeyStats_Sql_ToFile Blocked dnsqueries weekly /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gks4
 		rm -f /tmp/uidivstats.sql
 
 		queriesTotalweekly="$(cat /tmp/queriesTotalweekly)"
@@ -1967,10 +2025,10 @@ Generate_KeyStats()
 
 		#MONTHLY#
 		Write_KeyStats_Sql_ToFile Total dnsqueries monthly /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gks5
 
 		Write_KeyStats_Sql_ToFile Blocked dnsqueries monthly /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gks6
 
 		rm -f /tmp/uidivstats.sql
 
@@ -2004,7 +2062,7 @@ Generate_Count_Blocklist_Domains()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Generate_Stats_From_SQLite()
 {
@@ -2016,13 +2074,13 @@ Generate_Stats_From_SQLite()
 	do
 		#DAILY#
 		Write_Time_Sql_ToFile "$metric" dnsqueries 0.25 1 "$CSV_OUTPUT_DIR/$metric" daily /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq1
 
 		Write_Count_Sql_ToFile "$metric" dnsqueries 1 "$CSV_OUTPUT_DIR/$metric" daily /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq2
 
 		Write_Count_PerClient_Sql_ToFile "$metric" dnsqueries 1 "$CSV_OUTPUT_DIR/$metric" daily /tmp/uidivstats.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq3
 		rm -f /tmp/uidivstats.sql
 
 		sed -i '1i Fieldname,SrcIP,ReqDmn,Count' "$CSV_OUTPUT_DIR/${metric}dailyclients.htm"
@@ -2033,13 +2091,13 @@ Generate_Stats_From_SQLite()
 		if [ $# -gt 1 ] && [ -n "$2" ] && [ "$2" = "fullrefresh" ]
 		then
 			Write_Time_Sql_ToFile "$metric" dnsqueries 1 7 "$CSV_OUTPUT_DIR/$metric" weekly /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq4
 
 			Write_Count_Sql_ToFile "$metric" dnsqueries 7 "$CSV_OUTPUT_DIR/$metric" weekly /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq5
 
 			Write_Count_PerClient_Sql_ToFile "$metric" dnsqueries 7 "$CSV_OUTPUT_DIR/$metric" weekly /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq6
 			rm -f /tmp/uidivstats.sql
 
 			sed -i '1i Fieldname,SrcIP,ReqDmn,Count' "$CSV_OUTPUT_DIR/${metric}weeklyclients.htm"
@@ -2051,13 +2109,13 @@ Generate_Stats_From_SQLite()
 		if [ $# -gt 1 ] && [ -n "$2" ] && [ "$2" = "fullrefresh" ]
 		then
 			Write_Time_Sql_ToFile "$metric" dnsqueries 3 30 "$CSV_OUTPUT_DIR/$metric" monthly /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq7
 
 			Write_Count_Sql_ToFile "$metric" dnsqueries 30 "$CSV_OUTPUT_DIR/$metric" monthly /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq8
 
 			Write_Count_PerClient_Sql_ToFile "$metric" dnsqueries 30 "$CSV_OUTPUT_DIR/$metric" monthly /tmp/uidivstats.sql
-			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+			_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq9
 			rm -f /tmp/uidivstats.sql
 
 			sed -i '1i Fieldname,SrcIP,ReqDmn,Count' "$CSV_OUTPUT_DIR/${metric}monthlyclients.htm"
@@ -2067,7 +2125,7 @@ Generate_Stats_From_SQLite()
 	done
 
 	Write_View_Sql_ToFile drop dnsqueries daily /tmp/uidivstats.sql
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats.sql gsq10
 	rm -f /tmp/uidivstats.sql
 
 	{
@@ -2076,7 +2134,7 @@ Generate_Stats_From_SQLite()
 		echo "PRAGMA temp_store=1;"
 		echo "SELECT DISTINCT [SrcIP] SrcIP FROM dnsqueries;"
 	} > /tmp/ipdistinctclients.sql
-	_ApplyDatabaseSQLCmds_ /tmp/ipdistinctclients.sql
+	_ApplyDatabaseSQLCmds_ /tmp/ipdistinctclients.sql gsq11
 	rm -f /tmp/ipdistinctclients.sql
 
 	ipclients="$(cat /tmp/ipdistinctclients)"
@@ -2139,13 +2197,18 @@ _ShowDatabaseFileInfo_()
 _GetTrimLogTimeStamp_() { printf "[$(date +"$trimLogDateForm")]" ; }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-23] ##
+## Modified by Martinski W. [2025-Jan-28] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmds_()
 {
-    local errorCount=0  maxErrorCount=5
+    local errorCount=0  maxErrorCount=5  callFlag
     local triesCount=0  maxTriesCount=25  sqlErrorMsg
     local tempLogFilePath="/tmp/uiDivStats_TMP_$$.LOG"
+
+    if [ $# -gt 1 ] && [ -n "$2" ]
+    then callFlag="$2"
+    else callFlag="err"
+    fi
 
     resultStr=""
     foundError=false ; foundLocked=false
@@ -2157,15 +2220,18 @@ _ApplyDatabaseSQLCmds_()
         if "$SQLITE3_PATH" "$DNS_DB" < "$1" >> "$tempLogFilePath" 2>&1
         then foundError=false ; foundLocked=false ; break
         fi
-        sqlErrorMsg="$(tail -n1 "$tempLogFilePath")"
-        if echo "$sqlErrorMsg" | grep -qE "^(Error:|Parse error|Runtime error)"
+        sqlErrorMsg="$(cat "$tempLogFilePath")"
+        if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:)"
         then
             if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
-            then foundLocked=true ; sleep 2 ; continue
+            then
+                echo -n > "$tempLogFilePath"  ##Clear for next error found##
+                foundLocked=true ; sleep 2 ; continue
             fi
             errorCount="$((errorCount + 1))"
             foundError=true ; foundLocked=false
-            Print_Output true "SQLite3 failure: $sqlErrorMsg" "$ERR"
+            Print_Output true "SQLite3 failure[$callFlag]: $sqlErrorMsg" "$ERR"
+            echo -n > "$tempLogFilePath"  ##Clear for next error found##
         fi
         [ "$triesCount" -ge "$maxTriesCount" ] && break
         [ "$errorCount" -ge "$maxErrorCount" ] && break
@@ -2186,39 +2252,53 @@ _ApplyDatabaseSQLCmds_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-23] ##
+## Modified by Martinski W. [2025-Jan-28] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmdsForTrim_()
 {
-    local errorCount=0  maxErrorCount=5
+    local errorCount=0  maxErrorCount=5  callFlag
     local triesCount=0  maxTriesCount=25  sqlErrorMsg
+    local tempLogFilePath="/tmp/uiDivStats_TMP_$$.LOG"
+
+    if [ $# -gt 1 ] && [ -n "$2" ]
+    then callFlag="$2"
+    else callFlag="err"
+    fi
 
     resultStr=""
     foundError=false ; foundLocked=false
+    rm -f "$tempLogFilePath"
 
     while [ "$errorCount" -lt "$maxErrorCount" ] && \
           [ "$((triesCount++))" -lt "$maxTriesCount" ]
     do
-        if "$SQLITE3_PATH" "$DNS_DB" < /tmp/uidivstats-trim.sql >> "$trimLOGFilePath" 2>&1
+        if "$SQLITE3_PATH" "$DNS_DB" < "$1" >> "$tempLogFilePath" 2>&1
         then foundError=false ; foundLocked=false ; break
         fi
-        sqlErrorMsg="$(tail -n1 "$trimLOGFilePath")"
-        echo "-----------------------------------" >> "$trimLOGFilePath"
-        printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$trimLOGFilePath"
-        if echo "$sqlErrorMsg" | grep -qE "^(Error:|Parse error|Runtime error)"
+        sqlErrorMsg="$(cat "$tempLogFilePath")"
+        echo "-----------------------------------" >> "$tempLogFilePath"
+        printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$tempLogFilePath"
+        if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:)"
         then
             if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
-            then foundLocked=true ; sleep 2 ; continue
+            then
+                cat "$tempLogFilePath" >> "$trimLOGFilePath"
+                echo -n > "$tempLogFilePath"  ##Clear for next error found##
+                foundLocked=true ; sleep 2 ; continue
             fi
             errorCount="$((errorCount + 1))"
             foundError=true ; foundLocked=false
-            Print_Output true "SQLite3 failure: $sqlErrorMsg" "$ERR"
+            Print_Output true "SQLite3 failure[$callFlag]: $sqlErrorMsg" "$ERR"
+            cat "$tempLogFilePath" >> "$trimLOGFilePath"
+            echo -n > "$tempLogFilePath"  ##Clear for next error found##
         fi
         [ "$triesCount" -ge "$maxTriesCount" ] && break
         [ "$errorCount" -ge "$maxErrorCount" ] && break
         sleep 1
     done
 
+    [ -s "$tempLogFilePath" ] && cat "$tempLogFilePath" >> "$trimLOGFilePath"
+    rm -f "$tempLogFilePath"
     if "$foundError"
     then resultStr="reported error(s)."
     elif "$foundLocked"
@@ -2231,9 +2311,9 @@ _ApplyDatabaseSQLCmdsForTrim_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-26] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
-Optimise_DNS_DB()
+_Optimize_Database_()
 {
 	renice 15 $$
 
@@ -2243,16 +2323,17 @@ Optimise_DNS_DB()
 	printf "Running database analysis and optimization...\n" | tee -a "$trimLOGFilePath"
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 
-	Print_Output true "Running nightly database analysis and optimization..." "$PASS"
+	Print_Output true "Running database analysis and optimization..." "$PASS"
 	{
 		echo "PRAGMA temp_store=1;"
+		echo "PRAGMA journal_mode=WAL;"
 		echo "PRAGMA analysis_limit=0;"
 		echo "PRAGMA cache_size=-20000;"
 		echo "ANALYZE dnsqueries;"
 		echo "VACUUM;"
 	} > /tmp/uidivstats-trim.sql
 
-	_ApplyDatabaseSQLCmdsForTrim_
+	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql opt1
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 	printf "Database analysis and optimization process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 	printf "$(_GetTrimLogTimeStamp_) END.\n" | tee -a "$trimLOGFilePath"
@@ -2265,9 +2346,9 @@ Optimise_DNS_DB()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Oct-27] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
-Trim_DNS_DB()
+_Trim_Database_()
 {
 	Check_Lock
 	renice 15 $$
@@ -2291,9 +2372,10 @@ Trim_DNS_DB()
 	printf "Trimming database records older than [$(DaysToKeep check)] days...\n" | tee -a "$trimLOGFilePath"
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 
-	Print_Output true "Trimming records entries from database..." "$PASS"
+	Print_Output true "Trimming records from database..." "$PASS"
 	{
 		echo "PRAGMA temp_store=1;"
+		echo "PRAGMA journal_mode=WAL;"
 		echo "PRAGMA cache_size=-20000;"
 		echo "BEGIN TRANSACTION;"
 		echo "DELETE FROM [dnsqueries] WHERE [Timestamp] < strftime('%s',datetime($timeNow,'unixepoch','-$(DaysToKeep check) day'));"
@@ -2302,19 +2384,19 @@ Trim_DNS_DB()
 		echo "END TRANSACTION;"
 	} > /tmp/uidivstats-trim.sql
 
-	_ApplyDatabaseSQLCmdsForTrim_
+	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql trm1
 	"$foundError" && trimErrorsFound=true
 	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
 	printf "$(_GetTrimLogTimeStamp_) Database record trimming process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 
 	Write_View_Sql_ToFile drop dnsqueries weekly /tmp/uidivstats-trim.sql
-	_ApplyDatabaseSQLCmdsForTrim_
+	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql trm2
 	"$foundError" && trimErrorsFound=true
 	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
 	printf "$(_GetTrimLogTimeStamp_) Database weekly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 
 	Write_View_Sql_ToFile drop dnsqueries monthly /tmp/uidivstats-trim.sql
-	_ApplyDatabaseSQLCmdsForTrim_
+	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql trm3
 	"$foundError" && trimErrorsFound=true
 	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
 	printf "$(_GetTrimLogTimeStamp_) Database monthly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
@@ -2365,7 +2447,7 @@ Flush_Cache_To_DB()
 			echo "DROP TABLE IF EXISTS dnsqueries_tmp;"
 			echo "END TRANSACTION;"
 		} > /tmp/cache-uiDivStats-SQL.sql
-		_ApplyDatabaseSQLCmds_ /tmp/cache-uiDivStats-SQL.sql
+		_ApplyDatabaseSQLCmds_ /tmp/cache-uiDivStats-SQL.sql flh1
 
 		rm -f /tmp/cache-uiDivStats-SQL.sql
 		rm -f /tmp/cache-uiDivStats-SQL.tmp
@@ -2374,7 +2456,7 @@ Flush_Cache_To_DB()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-13] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Reset_DB()
 {
@@ -2390,12 +2472,12 @@ Reset_DB()
 
 	Print_Output false "Creating database table and enabling write-ahead logging..." "$PASS"
 	{
-		echo "PRAGMA journal_mode=WAL;"
 		echo "PRAGMA temp_store=1;"
+		echo "PRAGMA journal_mode=WAL;"
 		echo "CREATE TABLE IF NOT EXISTS [dnsqueries] ([QueryID] INTEGER PRIMARY KEY NOT NULL,[Timestamp] NUMERIC NOT NULL,[SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL);"
-	}  > /tmp/uidivstats-upgrade.sql
+	} > /tmp/uidivstats-upgrade.sql
 
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql rst1
 	if "$foundError" || "$foundLocked"
 	then
 		Print_Output true "Unable to create database file." "$CRIT"
@@ -2447,7 +2529,7 @@ Process_Upgrade()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-21] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Migrate_Old_Data()
 {
@@ -2464,7 +2546,7 @@ Migrate_Old_Data()
 			echo "ATTACH DATABASE '$DNS_DB.old' AS OLD;"
 			echo "INSERT INTO [dnsqueries] ([Timestamp], [SrcIP], [ReqDmn], [QryType], [Allowed]) SELECT [Timestamp], [SrcIP], [ReqDmn], CASE [QryType] WHEN 'type=65' THEN 'HTTPS' ELSE [QryType] END, [Result] == 'allowed' FROM OLD.[dnsqueries] WHERE [Timestamp] > strftime('%s',datetime($timenow,'unixepoch','-$(DaysToKeep check) day'));"
 		} > /tmp/uidivstats-upgrade.sql
-		_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+		_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql mgr1
 
 		rm -f /tmp/uidivstats-upgrade.sql
 		rm -f "${DNS_DB}.old"
@@ -2545,11 +2627,11 @@ ScriptHeader()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-15] ##
+## Modified by Martinski W. [2025-Feb-08] ##
 ##----------------------------------------##
 MainMenu()
 {
-	local statusBackProcsState  statusBackProcsWarning
+	local statusBackProcsState
     local cacheModeStr  menuOption  tmpInfoStr  memInfoStr
 
 	_InvalidMenuOptionMsg_()
@@ -2561,15 +2643,13 @@ MainMenu()
 
 	if "$(_ToggleBackgroundProcsEnabled_ check)"
 	then
-	    statusBackProcsState="${GRNct}ENABLED${CLEARFORMAT}"
-	    statusBackProcsWarning=""
+	    statusBackProcsState="${PassBGRNct} ENABLED ${CLRct}"
 	else
-	    statusBackProcsState="${CRIT} DISABLED ${CLEARct}"
-	    statusBackProcsWarning="${BOLD}${WARN} <<--- *WARNING*"
+	    statusBackProcsState="${CritIREDct} DISABLED ${CLRct}  ${WarnBYLWct} <<< *WARNING* ${CLRct}"
 	fi
 
 	if [ "$(CacheMode check)" = "none" ]
-	then cacheModeStr="none"
+	then cacheModeStr="NONE"
 	else cacheModeStr="TMPFS"
 	fi
 
@@ -2586,16 +2666,16 @@ MainMenu()
 	printf "6.    Set the hour for daily cron job to trim the database\n"
 	printf "      Currently: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ timeHRx)"
 	printf "p.    Toggle background processing of Diversion statistics\n"
-	printf "      Currently: ${statusBackProcsState} ${statusBackProcsWarning}${CLEARFORMAT}\n\n"
+	printf "      Currently: ${statusBackProcsState}${CLEARFORMAT}\n\n"
 	printf "q.    Toggle query mode\n"
 	printf "      Currently: ${SETTING}%s${CLEARFORMAT} query types will be logged\n\n" "$(QueryMode check)"
 	printf "c.    Toggle cache mode\n"
 	printf "      Currently: ${SETTING}%s${CLEARFORMAT} being used to cache query records\n" "$cacheModeStr"
-	if [ "$cacheModeStr" = "none" ]
+	if [ "$cacheModeStr" = "NONE" ]
 	then printf "\n"
 	else
         tmpInfoStr="$(_Get_TMPFS_Space_ FREE HR)" ; memInfoStr="$(_GetAvailableRAM_ HRx)"
-        printf "      TMPFS Available: ${SETTING}%s${CLEARFORMAT}   RAM Available: ${SETTING}%s${CLEARFORMAT}\n\n" "$tmpInfoStr" "$memInfoStr"
+        printf "      TMPFS Reported: ${SETTING}%s${CLEARFORMAT}   RAM Available: ${SETTING}%s${CLEARFORMAT}\n\n" "$tmpInfoStr" "$memInfoStr"
 	fi
 	printf "u.    Check for updates\n"
 	printf "uf.   Update %s with latest version (force update)\n\n" "$SCRIPT_NAME"
@@ -2804,7 +2884,7 @@ Check_Requirements()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-21] ##
+## Modified by Martinski W. [2025-Feb-02] ##
 ##----------------------------------------##
 Menu_Install()
 {
@@ -2843,12 +2923,12 @@ Menu_Install()
 	renice 15 $$
 	Print_Output false "Creating database table and enabling write-ahead logging..." "$PASS"
 	{
-		echo "PRAGMA journal_mode=WAL;"
 		echo "PRAGMA temp_store=1;"
+		echo "PRAGMA journal_mode=WAL;"
 		echo "CREATE TABLE IF NOT EXISTS [dnsqueries] ([QueryID] INTEGER PRIMARY KEY NOT NULL,[Timestamp] NUMERIC NOT NULL,[SrcIP] TEXT NOT NULL,[ReqDmn] TEXT NOT NULL,[QryType] Text NOT NULL,[Allowed] INTEGER NOT NULL);"
-	}  > /tmp/uidivstats-upgrade.sql
+	} > /tmp/uidivstats-upgrade.sql
 
-	_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql
+	_ApplyDatabaseSQLCmds_ /tmp/uidivstats-upgrade.sql ins1
 	if "$foundError" || "$foundLocked"
 	then
 		Print_Output true "Unable to create database file." "$CRIT"
@@ -3099,13 +3179,15 @@ Menu_Uninstall()
 	eval exec "$FD>$LOCKFILE"
 	flock -x "$FD"
 	Get_WebUI_Page "$SCRIPT_DIR/uidivstats_www.asp"
-	if [ -n "$MyPage" ] && [ "$MyPage" != "none" ] && [ -f "/tmp/menuTree.js" ]
+	if [ -n "$MyWebPage" ] && \
+	   [ "$MyWebPage" != "NONE" ] && \
+	   [ -f "$TEMP_MENU_TREE" ]
 	then
-		sed -i "\\~$MyPage~d" /tmp/menuTree.js
+		sed -i "\\~$MyWebPage~d" "$TEMP_MENU_TREE"
 		umount /www/require/modules/menuTree.js
-		mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js
-		rm -f "$SCRIPT_WEBPAGE_DIR/$MyPage"
-		rm -f "$SCRIPT_WEBPAGE_DIR/$(echo $MyPage | cut -f1 -d'.').title"
+		mount -o bind "$TEMP_MENU_TREE" /www/require/modules/menuTree.js
+		rm -f "$SCRIPT_WEBPAGE_DIR/$MyWebPage"
+		rm -f "$SCRIPT_WEBPAGE_DIR/$(echo "$MyWebPage" | cut -f1 -d'.').title"
 	fi
 	flock -u "$FD"
 	rm -f "$SCRIPT_DIR/uidivstats_www.asp" 2>/dev/null
@@ -3237,21 +3319,21 @@ Show_Help()
 {
 	cat <<EOF
 Available commands:
-  $SCRIPT_NAME about              explains functionality
-  $SCRIPT_NAME update             checks for updates
-  $SCRIPT_NAME forceupdate        updates to latest version (force update)
-  $SCRIPT_NAME startup force      runs startup actions such as mount WebUI tab
-  $SCRIPT_NAME install            installs script
-  $SCRIPT_NAME uninstall          uninstalls script
-  $SCRIPT_NAME generate           update daily statistics and charts
-  $SCRIPT_NAME fullrefresh        update daily, weekly and monthly statistics and charts
-  $SCRIPT_NAME querylog           retrieve last 5000 records to show in WebUI
-  $SCRIPT_NAME flushtodb          flush contents of cache to database
-  $SCRIPT_NAME trimdb             run maintenance on database (this runs automatically every night)
-  $SCRIPT_NAME enableprocs        re-enable background processing of Diversion statistics
-  $SCRIPT_NAME disableprocs       disable background processing of Diversion statistics
-  $SCRIPT_NAME develop            switch to development branch
-  $SCRIPT_NAME stable             switch to stable branch
+  $SCRIPT_NAME about            explains functionality
+  $SCRIPT_NAME update           checks for updates
+  $SCRIPT_NAME forceupdate      updates to latest version (force update)
+  $SCRIPT_NAME startup force    runs startup actions such as mount WebUI tab
+  $SCRIPT_NAME install          installs script
+  $SCRIPT_NAME uninstall        uninstalls script
+  $SCRIPT_NAME generate         update daily statistics and charts
+  $SCRIPT_NAME fullrefresh      update daily, weekly and monthly statistics and charts
+  $SCRIPT_NAME querylog         retrieve last 5000 records to show in WebUI
+  $SCRIPT_NAME flushtodb        flush contents of cache to database
+  $SCRIPT_NAME trimdb           run maintenance on database (this runs automatically every night)
+  $SCRIPT_NAME enableprocs      re-enable background processing of Diversion statistics
+  $SCRIPT_NAME disableprocs     disable background processing of Diversion statistics
+  $SCRIPT_NAME develop          switch to development branch
+  $SCRIPT_NAME stable           switch to stable branch
 EOF
 	printf "\n"
 }
@@ -3373,10 +3455,10 @@ case "$1" in
 	trimdb)
 		NTP_Ready
 		Entware_Ready
-		Trim_DNS_DB
+		_Trim_Database_
 		Check_Lock
 		Migrate_Old_Data
-		Optimise_DNS_DB
+		_Optimize_Database_
 		Menu_GenerateStats fullrefresh
 		exit 0
 	;;
@@ -3405,11 +3487,9 @@ case "$1" in
 		Set_Version_Custom_Settings local "$SCRIPT_VERSION"
 		Set_Version_Custom_Settings server "$SCRIPT_VERSION"
 		if [ -f "$SCRIPT_DIR/SQLData.js" ]; then
-			mv "$SCRIPT_DIR/SQLData.js" "$SCRIPT_USB_DIR/SQLData.js"
+			mv -f "$SCRIPT_DIR/SQLData.js" "$SCRIPT_USB_DIR/SQLData.js"
 		fi
-		if [ -z "$2" ]; then
-			exec "$0"
-		fi
+		if [ $# -lt 2 ] || [ -z "$2" ] ; then exec "$0" ; fi
 		exit 0
 	;;
 	postupdate)
@@ -3431,6 +3511,9 @@ case "$1" in
 		fi
 		Auto_ServiceEvent create 2>/dev/null
 		Shortcut_Script create
+		Set_Version_Custom_Settings local "$SCRIPT_VERSION"
+		Set_Version_Custom_Settings server "$SCRIPT_VERSION"
+		exit 0
 	;;
 	about)
 		ScriptHeader
@@ -3452,7 +3535,7 @@ case "$1" in
 		    SCRIPT_BRANCH="develop"
 		else
 		    SCRIPT_BRANCH="master"
-		    printf "\n${REDct}The 'develop' branch is NOT available. Updating from the 'master' branch...${CLEARct}\n"
+		    printf "\n${REDct}The 'develop' branch is NOT available. Updating from the 'master' branch...${CLRct}\n"
 		fi
 		SCRIPT_REPO="https://raw.githubusercontent.com/decoderman/$SCRIPT_NAME/$SCRIPT_BRANCH"
 		Update_Version force
